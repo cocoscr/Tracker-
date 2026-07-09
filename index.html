@@ -3,39 +3,41 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Portafoglio</title>
   <meta name="theme-color" content="#0F1613" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Spese" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👛</text></svg>" />
+  <title>Portafoglio</title>
 
+  <!-- Librerie da CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js" crossorigin></script>
+  <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.454.0/dist/umd/lucide.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Manrope:wght@400;500;600;700;800&display=swap');
-    html, body { background: #0F1613; margin: 0; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .spin { display: inline-block; animation: spin 1s linear infinite; }
+    html, body { margin: 0; padding: 0; background: #0F1613; }
+    ::-webkit-scrollbar { height: 0; width: 0; }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
-  <script type="text/babel" data-presets="react">
+  <script type="text/babel" data-presets="env,react">
     const { useState, useEffect, useMemo } = React;
-    const { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } = Recharts;
+    const {
+      AreaChart, Area, BarChart, Bar, Cell, ReferenceLine,
+      XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+    } = Recharts;
 
     // ---- config: sostituisci con il tuo Sheet ID se cambia ----
     const SHEET_ID = "1J36Imy-qTi4Ubr3s-CuzBcgzU1PGtDSQlsjE0Ap3zIY";
     const SHEET_NAME = "Transazioni";
-    const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}&t=${Date.now()}`;
+    const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}`;
 
     const C = {
       bg: "#0F1613",
@@ -54,33 +56,57 @@
     const fontDisplay = "'Space Mono', ui-monospace, 'SF Mono', Menlo, monospace";
     const fontBody = "'Manrope', ui-sans-serif, system-ui, -apple-system, sans-serif";
 
+    // ---- icone: rese da lucide (UMD). Se un nome manca, si prova l'alias successivo ----
+    function nodoIcona(nomi) {
+      if (typeof lucide === "undefined" || !lucide.icons) return null;
+      for (const n of nomi) {
+        if (lucide.icons[n]) return lucide.icons[n];
+      }
+      return null;
+    }
+
+    function Icona({ nomi, size = 16, className = "", style = {} }) {
+      const node = nodoIcona(nomi);
+      if (!node) {
+        return <span style={{ fontSize: size * 0.8, lineHeight: 1, ...style }} className={className}>●</span>;
+      }
+      return (
+        <svg
+          width={size}
+          height={size}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={className}
+          style={style}
+        >
+          {node.map(([tag, attrs], i) => React.createElement(tag, { key: i, ...attrs }))}
+        </svg>
+      );
+    }
+
     const iconMap = {
-      "Bollette": "⚡", "Utenze": "💡",
-      "Assicurazioni": "🛡️",
-      "Spese Personali": "👤",
-      "Benzina": "⛽",
-      "Cibo SM": "🛒",
-      "Lavoro": "💼",
-      "Salute": "🩺",
-      "Abbonamenti": "🔁",
-      "Casa": "🏠",
-      "Regali": "🎁",
-      "Stipendio": "💶",
-      "Trasferte": "✈️", "Viaggi": "🧳",
-      "PAC": "🐷", "Risparmi": "💰", "Rendimenti": "📈",
-      "Macchina": "🚗",
-      "Università": "🎓",
-      "Carta di Credito": "💳",
-      "Mangiare fuori": "🍕",
-      "Uscite & Svago": "🎉",
-      "Cura Personale": "✂️",
-      "Pedaggi & Parcheggi": "🅿️",
-      "Sport": "🏋️",
-      "Vestiti": "👕",
-      "Buffi": "🤝",
-      "Multe/imprevisti": "⚠️",
+      "Bollette": ["Zap"],
+      "Assicurazioni": ["Shield"],
+      "Spese Personali": ["User"],
+      "Benzina": ["Fuel"],
+      "Cibo SM": ["ShoppingCart"],
+      "Lavoro": ["Briefcase"],
+      "Salute": ["HeartPulse"],
+      "Abbonamenti": ["Repeat"],
+      "Casa": ["House", "Home"],
+      "Regali": ["Gift"],
+      "Stipendio": ["Banknote"],
+      "Trasferte": ["Plane"],
+      "PAC": ["PiggyBank"],
+      "Macchina": ["Car"],
+      "Università": ["GraduationCap"],
+      "Carta di Credito": ["CreditCard"],
     };
-    const iconFor = (cat) => iconMap[cat] || "🏷️";
+    const iconeFor = (cat) => iconMap[cat] || ["Tag"];
 
     function parseImporto(str) {
       if (!str) return 0;
@@ -94,8 +120,32 @@
     const euro = (n) =>
       Math.abs(n).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+    // ---- ordinamento mesi: riconosce "Gennaio", "Gen", "gennaio 2026", "01/2026", "2026-01" ----
+    const MESI_IT = [
+      "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
+      "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre",
+    ];
+
+    function chiaveOrdinamentoMese(label, fallbackIndex) {
+      const lower = (label || "").toLowerCase();
+      let meseIdx = MESI_IT.findIndex((n) => lower.startsWith(n.slice(0, 3)) || lower.includes(n));
+      if (meseIdx === -1) {
+        const num = lower.match(/(?:^|\D)(0?[1-9]|1[0-2])(?:\D|$)/);
+        if (num) meseIdx = parseInt(num[1], 10) - 1;
+      }
+      const yearMatch = lower.match(/(20\d{2})/);
+      const anno = yearMatch ? parseInt(yearMatch[1], 10) : 0;
+      if (meseIdx === -1) return 100000 + fallbackIndex;
+      return anno * 12 + meseIdx;
+    }
+
     function useSheetData() {
       const [state, setState] = useState({ loading: true, error: null, rows: [] });
+      const [tick, setTick] = useState(0);
+      const ricarica = () => {
+        setState((s) => ({ ...s, loading: true, error: null }));
+        setTick((t) => t + 1);
+      };
 
       useEffect(() => {
         let cancelled = false;
@@ -124,22 +174,27 @@
             if (!cancelled) setState({ loading: false, error: err.message, rows: [] });
           });
         return () => { cancelled = true; };
-      }, []);
+      }, [tick]);
 
-      return state;
+      return { ...state, ricarica };
     }
 
     function SegmentToggle({ options, value, onChange }) {
       return (
         <div
-          className="inline-flex rounded-full p-1 flex-wrap"
-          style={{ background: C.surfaceAlt, border: `1px solid ${C.hairline}` }}
+          className="flex rounded-full p-1 overflow-x-auto max-w-full"
+          style={{
+            background: C.surfaceAlt,
+            border: `1px solid ${C.hairline}`,
+            scrollbarWidth: "none",
+            WebkitOverflowScrolling: "touch",
+          }}
         >
           {options.map((k) => (
             <button
               key={k}
               onClick={() => onChange(k)}
-              className="px-3 py-1 text-xs rounded-full transition-colors"
+              className="px-3 py-1 text-xs rounded-full transition-colors whitespace-nowrap shrink-0"
               style={{
                 fontFamily: fontBody,
                 fontWeight: 600,
@@ -156,7 +211,7 @@
 
     function StatChip({ label, value, delta, positive }) {
       const hasDelta = delta !== null && delta !== undefined && isFinite(delta);
-      const arrow = delta >= 0 ? "↗" : "↘";
+      const frecce = delta >= 0 ? ["ArrowUpRight"] : ["ArrowDownRight"];
       const good = positive ? delta >= 0 : delta < 0;
       return (
         <div className="flex-1 rounded-2xl p-4" style={{ background: C.surfaceAlt, border: `1px solid ${C.hairline}` }}>
@@ -168,7 +223,7 @@
           </div>
           {hasDelta && (
             <div className="flex items-center gap-1 mt-1 text-xs" style={{ color: good ? C.green : C.coral, fontFamily: fontBody }}>
-              <span>{arrow}</span>
+              <Icona nomi={frecce} size={13} />
               {Math.abs(Math.round(delta))}% vs mese prec.
             </div>
           )}
@@ -176,21 +231,95 @@
       );
     }
 
-    function CategoryBar({ nome, valore, max }) {
+    function CategoryBar({ nome, valore, max, attiva, onClick }) {
       const pct = max > 0 ? Math.round((valore / max) * 100) : 0;
       return (
-        <div className="flex items-center gap-3 py-2.5">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm" style={{ background: C.surfaceAlt }}>
-            {iconFor(nome)}
+        <button
+          onClick={onClick}
+          className="flex items-center gap-3 py-2.5 w-full text-left rounded-xl px-2 -mx-2 transition-colors"
+          style={{ background: attiva ? C.surfaceAlt : "transparent" }}
+        >
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+            style={{
+              background: attiva ? C.amber : C.surfaceAlt,
+              color: attiva ? C.bg : C.amber,
+              transition: "background 0.15s, color 0.15s",
+            }}
+          >
+            <Icona nomi={iconeFor(nome)} size={15} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex justify-between text-sm mb-1">
-              <span style={{ color: C.ink, fontFamily: fontBody, fontWeight: 500 }}>{nome}</span>
+              <span style={{ color: C.ink, fontFamily: fontBody, fontWeight: attiva ? 700 : 500 }}>{nome}</span>
               <span style={{ color: C.inkMuted, fontFamily: fontDisplay }}>€ {euro(valore)}</span>
             </div>
             <div className="h-1.5 rounded-full overflow-hidden" style={{ background: C.hairline }}>
               <div className="h-full rounded-full" style={{ width: `${pct}%`, background: C.amber }} />
             </div>
+          </div>
+        </button>
+      );
+    }
+
+    function AndamentoCategoria({ categoria, dati, meseCorrente }) {
+      const valori = dati.map((d) => d.valore).filter((v) => v > 0);
+      const media = valori.length ? valori.reduce((s, v) => s + v, 0) / valori.length : 0;
+      const totale = dati.reduce((s, d) => s + d.valore, 0);
+
+      return (
+        <div className="rounded-2xl p-6" style={{ background: C.surface, border: `1px solid ${C.hairline}` }}>
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <div className="text-xs" style={{ color: C.inkMuted, letterSpacing: "0.06em" }}>
+              ANDAMENTO CATEGORIA
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: C.surfaceAlt, color: C.amber }}>
+                <Icona nomi={iconeFor(categoria)} size={13} />
+              </div>
+              <span className="text-sm" style={{ color: C.ink, fontFamily: fontBody, fontWeight: 700 }}>
+                {categoria}
+              </span>
+            </div>
+          </div>
+          <div className="flex gap-4 mb-4 text-xs flex-wrap" style={{ color: C.inkMuted, fontFamily: fontBody }}>
+            <span>
+              Media mensile:{" "}
+              <span style={{ color: C.ink, fontFamily: fontDisplay, fontWeight: 700 }}>€ {euro(media)}</span>
+            </span>
+            <span>
+              Totale periodo:{" "}
+              <span style={{ color: C.ink, fontFamily: fontDisplay, fontWeight: 700 }}>€ {euro(totale)}</span>
+            </span>
+          </div>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={dati} margin={{ left: -20, right: 10 }}>
+              <CartesianGrid stroke={C.hairline} vertical={false} />
+              <XAxis
+                dataKey="mese"
+                stroke={C.inkMuted}
+                tick={{ fontSize: 10, fontFamily: fontBody }}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+              />
+              <YAxis hide />
+              <Tooltip
+                cursor={{ fill: `${C.hairline}55` }}
+                contentStyle={{ background: C.surfaceAlt, border: `1px solid ${C.hairline}`, borderRadius: 10, fontFamily: fontBody, fontSize: 12 }}
+                labelStyle={{ color: C.ink }}
+                formatter={(v) => [`€ ${euro(v)}`, categoria]}
+              />
+              <ReferenceLine y={media} stroke={C.inkMuted} strokeDasharray="4 4" strokeOpacity={0.6} />
+              <Bar dataKey="valore" radius={[5, 5, 0, 0]} maxBarSize={34}>
+                {dati.map((d) => (
+                  <Cell key={d.mese} fill={d.mese === meseCorrente ? C.amber : `${C.amber}66`} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+          <div className="text-xs mt-1" style={{ color: C.inkMuted, fontFamily: fontBody }}>
+            La linea tratteggiata è la media mensile. La barra piena è il mese selezionato.
           </div>
         </div>
       );
@@ -258,11 +387,14 @@
     }
 
     function Dashboard() {
-      const { loading, error, rows } = useSheetData();
+      const { loading, error, rows, ricarica } = useSheetData();
 
       const mesiDisponibili = useMemo(() => {
         const uniq = [...new Set(rows.map((r) => r.mese))].filter(Boolean);
-        return uniq;
+        return uniq
+          .map((m, i) => ({ m, k: chiaveOrdinamentoMese(m, i) }))
+          .sort((a, b) => a.k - b.k)
+          .map((x) => x.m);
       }, [rows]);
 
       const [mese, setMese] = useState(null);
@@ -296,6 +428,23 @@
           .sort((a, b) => b.valore - a.valore);
       }, [rows, mese]);
 
+      const [catSelezionata, setCatSelezionata] = useState(null);
+      useEffect(() => {
+        if (categorie.length === 0) return;
+        const esiste = categorie.some((c) => c.nome === catSelezionata);
+        if (!catSelezionata || !esiste) setCatSelezionata(categorie[0].nome);
+      }, [categorie]);
+
+      const serieCategoria = useMemo(() => {
+        if (!catSelezionata) return [];
+        return mesiDisponibili.map((m) => {
+          const valore = rows
+            .filter((r) => r.mese === m && r.tipo === "Spesa" && r.categoria === catSelezionata)
+            .reduce((s, r) => s + Math.abs(r.importo), 0);
+          return { mese: m, valore: Math.round(valore * 100) / 100 };
+        });
+      }, [rows, mesiDisponibili, catSelezionata]);
+
       const trend = useMemo(() => {
         const ultimiMesi = mesiDisponibili.slice(-6);
         return ultimiMesi.map((m) => {
@@ -320,8 +469,8 @@
           <div className="max-w-5xl mx-auto px-4 py-8 md:py-12">
             <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ background: C.surfaceAlt }}>
-                  👛
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: C.surfaceAlt, color: C.green }}>
+                  <Icona nomi={["Wallet"]} size={19} />
                 </div>
                 <div>
                   <div style={{ color: C.ink, fontFamily: fontBody, fontWeight: 800 }} className="text-lg leading-none">
@@ -332,23 +481,33 @@
                     <span className="text-xs" style={{ color: C.inkMuted, fontFamily: fontBody }}>
                       {loading ? "Caricamento dal foglio..." : error ? "Errore di lettura" : `Collegato a "${SHEET_NAME}"`}
                     </span>
+                    {!loading && (
+                      <button
+                        onClick={ricarica}
+                        title="Ricarica i dati dal foglio"
+                        className="ml-1 p-0.5 rounded transition-colors"
+                        style={{ color: C.inkMuted }}
+                      >
+                        <Icona nomi={["RefreshCw"]} size={11} />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
               {mesiDisponibili.length > 0 && (
-                <SegmentToggle options={mesiDisponibili.slice(-4)} value={mese} onChange={setMese} />
+                <SegmentToggle options={mesiDisponibili} value={mese} onChange={setMese} />
               )}
             </div>
 
             {loading && (
               <div className="flex items-center gap-2 justify-center py-20" style={{ color: C.inkMuted }}>
-                <span className="spin">◌</span> Carico i dati dal foglio...
+                <Icona nomi={["LoaderCircle", "Loader2"]} size={18} className="animate-spin" /> Carico i dati dal foglio...
               </div>
             )}
 
             {error && (
               <div className="rounded-2xl p-6 flex items-start gap-3" style={{ background: C.surface, border: `1px solid ${C.coral}55` }}>
-                <span style={{ color: C.coral }} className="shrink-0">⚠️</span>
+                <Icona nomi={["CircleAlert", "AlertCircle"]} size={18} style={{ color: C.coral }} className="shrink-0 mt-0.5" />
                 <div style={{ color: C.ink, fontFamily: fontBody, fontSize: "0.9rem" }}>
                   {error}. Controlla che il foglio sia condiviso con accesso "Chiunque abbia il link" (visualizzatore).
                 </div>
@@ -409,12 +568,25 @@
                     </div>
                   </div>
 
+                  {catSelezionata && serieCategoria.length > 0 && (
+                    <AndamentoCategoria categoria={catSelezionata} dati={serieCategoria} meseCorrente={mese} />
+                  )}
+
                   <div className="rounded-2xl p-6" style={{ background: C.surface, border: `1px solid ${C.hairline}` }}>
                     <div className="text-xs mb-1" style={{ color: C.inkMuted, letterSpacing: "0.06em" }}>
                       SPESA PER CATEGORIA
                     </div>
+                    <div className="text-xs mb-2" style={{ color: `${C.inkMuted}99`, fontFamily: fontBody }}>
+                      Tocca una categoria per vederne l'andamento mese per mese.
+                    </div>
                     {categorie.map((c) => (
-                      <CategoryBar key={c.nome} nome={c.nome} valore={c.valore} max={maxCat} />
+                      <CategoryBar
+                        key={c.nome}
+                        {...c}
+                        max={maxCat}
+                        attiva={c.nome === catSelezionata}
+                        onClick={() => setCatSelezionata(c.nome)}
+                      />
                     ))}
                   </div>
                 </div>
