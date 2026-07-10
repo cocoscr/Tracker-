@@ -40,10 +40,13 @@
     // ---- config: sostituisci con il tuo Sheet ID se cambia ----
     const SHEET_ID = "1J36Imy-qTi4Ubr3s-CuzBcgzU1PGtDSQlsjE0Ap3zIY";
     const SHEET_NAME = "Transazioni";
+    // foglio opzionale nello stesso file: colonne "Categoria" e "Budget" per sovrascrivere i budget automatici
+    const BUDGET_SHEET_NAME = "Budget";
     const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}`;
+    const BUDGET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(BUDGET_SHEET_NAME)}`;
 
     // ---- modifica qui l'elenco delle categorie considerate spese FISSE ----
-    const CATEGORIE_FISSE = ["Bollette", "Assicurazioni", "Abbonamenti", "Casa", "PAC", "Università", "Macchina", "Utenze"];
+    const CATEGORIE_FISSE = ["Bollette", "Assicurazioni", "Abbonamenti", "Casa", "PAC", "Università"];
 
     const C = {
       bg: "#0F1613",
@@ -142,7 +145,7 @@
     }
 
     function useSheetData() {
-      const [state, setState] = useState({ loading: true, error: null, rows: [] });
+      const [state, setState] = useState({ loading: true, error: null, rows: [], budgetManuale: {} });
       const [tick, setTick] = useState(0);
       const ricarica = () => {
         setState((s) => ({ ...s, loading: true, error: null }));
@@ -151,14 +154,15 @@
 
       useEffect(() => {
         let cancelled = false;
-        fetch(CSV_URL)
+
+        const caricaTransazioni = fetch(CSV_URL)
           .then((res) => {
             if (!res.ok) throw new Error("Impossibile leggere il foglio (è condiviso come 'chiunque con il link'?)");
             return res.text();
           })
           .then((csvText) => {
             const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-            const rows = parsed.data
+            return parsed.data
               .map((r) => ({
                 data: r["Data"],
                 tipo: (r["Tipo"] || "").trim(),
@@ -170,11 +174,32 @@
                 mese: (r["Mese"] || "").trim(),
               }))
               .filter((r) => r.tipo === "Spesa" || r.tipo === "Entrata");
-            if (!cancelled) setState({ loading: false, error: null, rows });
+          });
+
+        // il foglio "Budget" è opzionale: se non esiste, si prosegue con i budget automatici
+        const caricaBudget = fetch(BUDGET_CSV_URL)
+          .then((res) => (res.ok ? res.text() : ""))
+          .then((csv) => {
+            const map = {};
+            if (!csv || csv.trim().startsWith("<")) return map; // risposta HTML = foglio inesistente
+            const parsed = Papa.parse(csv, { header: true, skipEmptyLines: true });
+            (parsed.data || []).forEach((r) => {
+              const cat = (r["Categoria"] || "").trim();
+              const val = parseImporto(r["Budget"]);
+              if (cat && val > 0) map[cat] = val;
+            });
+            return map;
+          })
+          .catch(() => ({}));
+
+        Promise.all([caricaTransazioni, caricaBudget])
+          .then(([rows, budgetManuale]) => {
+            if (!cancelled) setState({ loading: false, error: null, rows, budgetManuale });
           })
           .catch((err) => {
-            if (!cancelled) setState({ loading: false, error: err.message, rows: [] });
+            if (!cancelled) setState({ loading: false, error: err.message, rows: [], budgetManuale: {} });
           });
+
         return () => { cancelled = true; };
       }, [tick]);
 
@@ -243,9 +268,23 @@
       );
     }
 
-    function CategoryBar({ nome, valore, max, attiva, onClick, colore }) {
-      const pct = max > 0 ? Math.round((valore / max) * 100) : 0;
+    function CategoryBar({ nome, valore, max, attiva, onClick, colore, budget }) {
       const col = colore || colorFor(nome);
+      let pct, barCol, destra;
+      if (budget) {
+        const rapporto = valore / budget.valore;
+        pct = Math.min(100, Math.round(rapporto * 100));
+        barCol = rapporto > 1 ? C.coral : rapporto > 0.85 ? C.amber : col;
+        destra = (
+          <span style={{ color: rapporto > 1 ? C.coral : C.inkMuted, fontFamily: fontDisplay }}>
+            € {euro(valore)} <span style={{ opacity: 0.6 }}>/ {euro0(budget.valore)}</span>
+          </span>
+        );
+      } else {
+        pct = max > 0 ? Math.round((valore / max) * 100) : 0;
+        barCol = col;
+        destra = <span style={{ color: C.inkMuted, fontFamily: fontDisplay }}>€ {euro(valore)}</span>;
+      }
       return (
         <button onClick={onClick}
           className="flex items-center gap-3 py-2.5 w-full text-left rounded-xl px-2 -mx-2 transition-colors"
@@ -257,10 +296,10 @@
           <div className="flex-1 min-w-0">
             <div className="flex justify-between text-sm mb-1">
               <span style={{ color: C.ink, fontFamily: fontBody, fontWeight: attiva ? 700 : 500 }}>{nome}</span>
-              <span style={{ color: C.inkMuted, fontFamily: fontDisplay }}>€ {euro(valore)}</span>
+              {destra}
             </div>
             <div className="h-1.5 rounded-full overflow-hidden" style={{ background: C.hairline }}>
-              <div className="h-full rounded-full" style={{ width: `${pct}%`, background: col }} />
+              <div className="h-full rounded-full" style={{ width: `${pct}%`, background: barCol }} />
             </div>
           </div>
         </button>
@@ -385,7 +424,7 @@
     }
 
     function Dashboard() {
-      const { loading, error, rows, ricarica } = useSheetData();
+      const { loading, error, rows, budgetManuale, ricarica } = useSheetData();
 
       const mesiDisponibili = useMemo(() => {
         const uniq = [...new Set(rows.map((r) => r.mese))].filter(Boolean);
@@ -494,6 +533,19 @@
         return media;
       }, [rows, mesiPrecedenti]);
 
+      // ---- budget per categoria: dal foglio "Budget" se presente, altrimenti automatico (media storica +5%) ----
+      const budgets = useMemo(() => {
+        const out = {};
+        const arrotonda = (v) => Math.max(10, Math.round(v / 10) * 10);
+        categorieSpese.forEach((c) => {
+          if (budgetManuale[c.nome]) out[c.nome] = { valore: budgetManuale[c.nome], fonte: "manuale" };
+          else if (mediaCategorie[c.nome]) out[c.nome] = { valore: arrotonda(mediaCategorie[c.nome] * 1.05), fonte: "auto" };
+        });
+        return out;
+      }, [categorieSpese, mediaCategorie, budgetManuale]);
+      const budgetTotale = Object.values(budgets).reduce((s, b) => s + b.valore, 0);
+      const spesoConBudget = categorieSpese.filter((c) => budgets[c.nome]).reduce((s, c) => s + c.valore, 0);
+
       // ---- verdetto principale ----
       const verdetto = useMemo(() => {
         if (!mese) return null;
@@ -531,15 +583,25 @@
         if (!mese) return [];
         const out = [];
 
-        // categorie sopra la propria media
+        // budget sforati o quasi
         categorieSpese.forEach((c) => {
-          const media = mediaCategorie[c.nome];
-          if (media && c.valore > media * 1.3 && c.valore - media >= 20) {
+          const b = budgets[c.nome];
+          if (!b || c.valore < 15) return;
+          if (c.valore > b.valore) {
             out.push({
-              tono: c.valore > media * 1.8 ? "corallo" : "ambra",
-              titolo: `${c.nome}: € ${euro0(c.valore)}, +${Math.round(((c.valore - media) / media) * 100)}% sopra la tua media`,
-              dettaglio: `Di solito qui spendi circa € ${euro0(media)} al mese.`,
-              peso: c.valore - media,
+              tono: "corallo",
+              titolo: `${c.nome} oltre budget: € ${euro0(c.valore)} su € ${euro0(b.valore)}`,
+              dettaglio: b.fonte === "auto"
+                ? `Budget automatico dalla tua media storica (≈ € ${euro0(mediaCategorie[c.nome] || b.valore)}/mese).`
+                : "Budget impostato da te nel foglio.",
+              peso: (c.valore - b.valore) + 2000,
+            });
+          } else if (c.valore > b.valore * 0.85) {
+            out.push({
+              tono: "ambra",
+              titolo: `${c.nome} al ${Math.round((c.valore / b.valore) * 100)}% del budget (€ ${euro0(b.valore)})`,
+              dettaglio: `Restano € ${euro0(b.valore - c.valore)}.`,
+              peso: c.valore,
             });
           }
         });
@@ -620,7 +682,7 @@
 
         const ordine = { corallo: 0, ambra: 1, verde: 2 };
         return out.sort((a, b) => ordine[a.tono] - ordine[b.tono] || b.peso - a.peso).slice(0, 6);
-      }, [rows, mese, categorieSpese, mediaCategorie, tassoRisparmio, saldo, speseFisse, corrente.uscite]);
+      }, [rows, mese, categorieSpese, mediaCategorie, budgets, tassoRisparmio, saldo, speseFisse, corrente.uscite]);
 
       const maxSpese = categorieSpese.length ? Math.max(...categorieSpese.map((c) => c.valore)) : 0;
       const maxEntrate = categorieEntrate.length ? Math.max(...categorieEntrate.map((c) => c.valore)) : 0;
@@ -759,14 +821,21 @@
 
                   {/* SPESE PER CATEGORIA */}
                   <div className="rounded-2xl p-6" style={{ background: C.surface, border: `1px solid ${C.hairline}` }}>
-                    <div className="text-xs mb-1" style={{ color: C.inkMuted, letterSpacing: "0.06em" }}>
-                      SPESE PER CATEGORIA
+                    <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                      <div className="text-xs" style={{ color: C.inkMuted, letterSpacing: "0.06em" }}>
+                        SPESE PER CATEGORIA
+                      </div>
+                      {budgetTotale > 0 && (
+                        <div className="text-xs" style={{ fontFamily: fontDisplay, color: spesoConBudget > budgetTotale ? C.coral : C.inkMuted }}>
+                          € {euro0(spesoConBudget)} / {euro0(budgetTotale)} budget
+                        </div>
+                      )}
                     </div>
                     <div className="text-xs mb-2" style={{ color: `${C.inkMuted}99`, fontFamily: fontBody }}>
-                      Ogni categoria ha il suo colore, sempre lo stesso. Tocca per vedere l'andamento nel tempo.
+                      La barra è la quota di budget usata: ambra oltre l'85%, corallo se sforato. Tocca per l'andamento nel tempo.
                     </div>
                     {categorieSpese.map((c) => (
-                      <CategoryBar key={c.nome} {...c} max={maxSpese}
+                      <CategoryBar key={c.nome} {...c} max={maxSpese} budget={budgets[c.nome]}
                         attiva={selezione && selezione.tipo === "Spesa" && c.nome === selezione.nome}
                         onClick={() => setSelezione({ nome: c.nome, tipo: "Spesa" })} />
                     ))}
