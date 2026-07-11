@@ -100,14 +100,34 @@
     };
     const iconeFor = (cat) => iconMap[cat] || ["Tag"];
 
-    function parseImporto(str) {
+    // Parsa importi sia in formato italiano ("€ 1.234,56") che inglese ("€ 1,234.56" / "€ 12.04").
+    // Il segno viene dedotto dal Tipo, non dal testo: Spesa/Uscita = negativo, Entrata = positivo.
+    function parseImporto(str, tipo) {
       if (!str) return 0;
-      const negative = str.trim().startsWith("-");
-      const cleaned = str.replace(/[^0-9,]/g, "");
-      const normalized = cleaned.replace(",", ".");
-      let val = parseFloat(normalized) || 0;
-      return negative ? -Math.abs(val) : val;
+      const cleaned = String(str).replace(/[^0-9.,]/g, "");
+      if (!cleaned) return 0;
+      const lastComma = cleaned.lastIndexOf(",");
+      const lastDot = cleaned.lastIndexOf(".");
+      let normalized;
+      if (lastComma > lastDot) normalized = cleaned.replace(/\./g, "").replace(/,/g, ".");
+      else if (lastDot > lastComma) normalized = cleaned.replace(/,/g, "");
+      else normalized = cleaned;
+      const val = Math.abs(parseFloat(normalized) || 0);
+      return /spesa|uscita/i.test(tipo || "") ? -val : val;
     }
+
+    // Deriva il mese direttamente dalla colonna Data (gg/mm/aaaa), così etichette
+    // come "lug 2026" e "Jul 2026" non possono più risultare mesi distinti.
+    const MESI_ABBR = ["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"];
+    function parseDataOggetto(str) {
+      const m = /^\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/.exec(str || "");
+      if (!m) return null;
+      const g = parseInt(m[1], 10), me = parseInt(m[2], 10);
+      let a = parseInt(m[3], 10); if (a < 100) a += 2000;
+      if (me < 1 || me > 12) return null;
+      return new Date(a, me - 1, g);
+    }
+    const meseAbbrLabel = (d) => (d ? `${MESI_ABBR[d.getMonth()]} ${d.getFullYear()}` : "");
 
     const euro = (n) =>
       Math.abs(n).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -163,17 +183,28 @@
           .then((csvText) => {
             const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
             return parsed.data
-              .map((r) => ({
-                data: r["Data"],
-                tipo: (r["Tipo"] || "").trim(),
-                descrizione: r["Descrizione"] || "",
-                categoria: (r["Categoria"] || "Altro").trim(),
-                metodo: r["Metodo"],
-                conto: r["Conto"],
-                importo: parseImporto(r["importo ricalcolato"]),
-                mese: (r["Mese"] || "").trim(),
-              }))
-              .filter((r) => r.tipo === "Spesa" || r.tipo === "Entrata");
+              .map((r) => {
+                const tipo = (r["Tipo"] || "").trim();
+                const categoria = (r["Categoria"] || "Altro").trim();
+                const dataObj = parseDataOggetto(r["Data"]);
+                return {
+                  data: r["Data"],
+                  dataObj,
+                  tipo,
+                  descrizione: r["Descrizione"] || "",
+                  categoria,
+                  metodo: r["Metodo"],
+                  conto: r["Conto"],
+                  // Importo e Mese vengono ricavati dalle colonne sorgente (Importo, Data):
+                  // le colonne calcolate del foglio ("importo ricalcolato", "Mese") non sono più usate.
+                  importo: parseImporto(r["Importo"], tipo),
+                  mese: meseAbbrLabel(dataObj),
+                  // Movimenti tra conti propri: esclusi dai totali, contati a parte.
+                  trasferimento: categoria === "Trasferimento" || /^trasf/i.test(tipo),
+                };
+              })
+              .filter((r) => r.dataObj && (r.tipo === "Spesa" || r.tipo === "Entrata" || /^trasf/i.test(r.tipo)))
+              .sort((a, b) => a.dataObj - b.dataObj);
           });
 
         // il foglio "Budget" è opzionale: se non esiste, si prosegue con i budget automatici
@@ -445,12 +476,16 @@
 
       const calcolaTotali = (m) => {
         const righe = rows.filter((r) => r.mese === m);
-        const entrate = righe.filter((r) => r.tipo === "Entrata").reduce((s, r) => s + r.importo, 0);
-        const uscite = righe.filter((r) => r.tipo === "Spesa").reduce((s, r) => s + Math.abs(r.importo), 0);
-        return { entrate, uscite };
+        const operative = righe.filter((r) => !r.trasferimento);
+        const entrate = operative.filter((r) => r.importo > 0).reduce((s, r) => s + r.importo, 0);
+        const uscite = operative.filter((r) => r.importo < 0).reduce((s, r) => s + Math.abs(r.importo), 0);
+        const trasf = righe.filter((r) => r.trasferimento);
+        const trasfOut = trasf.filter((r) => r.importo < 0).reduce((s, r) => s + Math.abs(r.importo), 0);
+        const trasfIn = trasf.filter((r) => r.importo > 0).reduce((s, r) => s + r.importo, 0);
+        return { entrate, uscite, trasfOut, trasfIn, trasfCount: trasf.length };
       };
 
-      const corrente = mese ? calcolaTotali(mese) : { entrate: 0, uscite: 0 };
+      const corrente = mese ? calcolaTotali(mese) : { entrate: 0, uscite: 0, trasfOut: 0, trasfIn: 0, trasfCount: 0 };
       const precedente = meseScorso ? calcolaTotali(meseScorso) : null;
       const entrateDelta = precedente && precedente.entrate ? ((corrente.entrate - precedente.entrate) / precedente.entrate) * 100 : null;
       const usciteDelta = precedente && precedente.uscite ? ((corrente.uscite - precedente.uscite) / precedente.uscite) * 100 : null;
@@ -461,7 +496,7 @@
       const perCategoria = (tipo) => {
         if (!mese) return [];
         const map = {};
-        rows.filter((r) => r.mese === mese && r.tipo === tipo).forEach((r) => {
+        rows.filter((r) => r.mese === mese && r.tipo === tipo && !r.trasferimento).forEach((r) => {
           map[r.categoria] = (map[r.categoria] || 0) + Math.abs(r.importo);
         });
         return Object.entries(map).map(([nome, valore]) => ({ nome, valore })).sort((a, b) => b.valore - a.valore);
@@ -501,7 +536,7 @@
 
       const transazioniRecenti = useMemo(() => {
         if (!mese) return [];
-        return rows.filter((r) => r.mese === mese).slice(-10).reverse();
+        return rows.filter((r) => r.mese === mese && !r.trasferimento).slice(-10).reverse();
       }, [rows, mese]);
 
       // fisse vs variabili nel mese
@@ -520,7 +555,7 @@
         const somme = {}; const conteggi = {};
         mesiPrecedenti.forEach((m) => {
           const perCat = {};
-          rows.filter((r) => r.mese === m && r.tipo === "Spesa").forEach((r) => {
+          rows.filter((r) => r.mese === m && r.tipo === "Spesa" && !r.trasferimento).forEach((r) => {
             perCat[r.categoria] = (perCat[r.categoria] || 0) + Math.abs(r.importo);
           });
           Object.entries(perCat).forEach(([c, v]) => {
@@ -609,13 +644,13 @@
         // spese singole anomale
         const mediaTx = {};
         const contTx = {};
-        rows.filter((r) => r.tipo === "Spesa").forEach((r) => {
+        rows.filter((r) => r.tipo === "Spesa" && !r.trasferimento).forEach((r) => {
           mediaTx[r.categoria] = (mediaTx[r.categoria] || 0) + Math.abs(r.importo);
           contTx[r.categoria] = (contTx[r.categoria] || 0) + 1;
         });
         Object.keys(mediaTx).forEach((c) => (mediaTx[c] = mediaTx[c] / contTx[c]));
         const anomale = rows
-          .filter((r) => r.mese === mese && r.tipo === "Spesa")
+          .filter((r) => r.mese === mese && r.tipo === "Spesa" && !r.trasferimento)
           .filter((r) => {
             const m = mediaTx[r.categoria] || 0;
             return contTx[r.categoria] >= 4 && Math.abs(r.importo) >= Math.max(60, m * 2.5);
@@ -632,7 +667,7 @@
         });
 
         // microspese che si sommano
-        const micro = rows.filter((r) => r.mese === mese && r.tipo === "Spesa" && Math.abs(r.importo) > 0 && Math.abs(r.importo) < 15);
+        const micro = rows.filter((r) => r.mese === mese && r.tipo === "Spesa" && !r.trasferimento && Math.abs(r.importo) > 0 && Math.abs(r.importo) < 15);
         const totMicro = micro.reduce((s, r) => s + Math.abs(r.importo), 0);
         if (micro.length >= 8) {
           out.push({
@@ -759,6 +794,27 @@
                         subColor={tassoRisparmio === null ? C.inkMuted : tassoRisparmio < 0 ? C.coral : tassoRisparmio < 0.1 ? C.amber : C.green}
                       />
                     </div>
+                    {corrente.trasfCount > 0 && (
+                      <div className="flex items-center gap-3 mt-3 rounded-2xl px-4 py-3"
+                        style={{ background: C.surfaceAlt, border: `1px dashed ${C.hairline}` }}>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: C.surface, color: C.inkMuted }}>
+                          <Icona nomi={["ArrowLeftRight"]} size={15} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs" style={{ color: C.inkMuted, letterSpacing: "0.04em" }}>
+                            TRA CONTI — {corrente.trasfCount} {corrente.trasfCount === 1 ? "movimento" : "movimenti"} (esclusi dai totali)
+                          </div>
+                          <div className="text-sm mt-0.5" style={{ color: C.ink, fontFamily: fontDisplay, fontWeight: 700 }}>
+                            → € {euro(corrente.trasfOut)} <span style={{ color: C.inkMuted, fontWeight: 400 }}>·</span> ← € {euro(corrente.trasfIn)}
+                          </div>
+                          {Math.abs(corrente.trasfOut - corrente.trasfIn) > 0.005 && (
+                            <div className="text-xs mt-0.5" style={{ color: C.amber }}>
+                              Non quadrano: € {euro(corrente.trasfOut - corrente.trasfIn)} di differenza — controlla le categorie.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* SEGNALI */}
