@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#0F1613" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -24,6 +24,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     html, body { margin: 0; padding: 0; background: #0F1613; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }
+    button, a, input, select { touch-action: manipulation; }
     ::-webkit-scrollbar { height: 0; width: 0; }
   </style>
 </head>
@@ -881,7 +884,13 @@
               onClose={() => setDrawerTrasf(false)}
             />
           )}
-          <div className="max-w-5xl mx-auto px-4 py-8 md:py-12">
+          <div className="max-w-5xl mx-auto px-4 py-8 md:py-12"
+            style={{
+              paddingLeft: "max(1rem, env(safe-area-inset-left))",
+              paddingRight: "max(1rem, env(safe-area-inset-right))",
+              paddingTop: "max(2rem, env(safe-area-inset-top))",
+              paddingBottom: "max(2rem, env(safe-area-inset-bottom))",
+            }}>
             <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: C.surfaceAlt, color: C.green }}>
@@ -936,7 +945,7 @@
                     <div className="text-xs mb-2" style={{ color: C.inkMuted, letterSpacing: "0.06em" }}>
                       SALDO NETTO — {(mese || "").toUpperCase()}
                     </div>
-                    <div style={{ color: saldo >= 0 ? C.ink : C.coral, fontFamily: fontDisplay, fontWeight: 700, fontSize: "2.5rem", lineHeight: 1.1 }}>
+                    <div style={{ color: saldo >= 0 ? C.ink : C.coral, fontFamily: fontDisplay, fontWeight: 700, fontSize: "clamp(1.8rem, 8vw, 2.5rem)", lineHeight: 1.1 }}>
                       {saldo < 0 ? "-" : ""}€ {euro(saldo)}
                     </div>
                     {verdetto && <Verdetto testo={verdetto.testo} tono={verdetto.tono} />}
