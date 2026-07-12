@@ -46,7 +46,7 @@
     const BUDGET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(BUDGET_SHEET_NAME)}`;
 
     // ---- modifica qui l'elenco delle categorie considerate spese FISSE ----
-    const CATEGORIE_FISSE = ["Bollette", "Assicurazioni", "Abbonamenti", "Casa", "PAC", "Università"];
+    const CATEGORIE_FISSE = ["Bollette", "Utenze", "Assicurazioni", "Abbonamenti", "Casa", "PAC", "Università"];
 
     const C = {
       bg: "#0F1613",
@@ -120,7 +120,19 @@
     // come "lug 2026" e "Jul 2026" non possono più risultare mesi distinti.
     const MESI_ABBR = ["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"];
     function parseDataOggetto(str) {
-      const m = /^\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/.exec(str || "");
+      const s = String(str || "").trim();
+      // formato gviz: Date(2026,3,15) — il mese è 0-based
+      const gv = /^Date\((\d{4}),(\d{1,2}),(\d{1,2})/.exec(s);
+      if (gv) return new Date(parseInt(gv[1], 10), parseInt(gv[2], 10), parseInt(gv[3], 10));
+      // formato ISO: 2026-04-15 (o 2026/04/15)
+      const iso = /^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/.exec(s);
+      if (iso) {
+        const a = parseInt(iso[1], 10), me = parseInt(iso[2], 10), g = parseInt(iso[3], 10);
+        if (me >= 1 && me <= 12) return new Date(a, me - 1, g);
+        return null;
+      }
+      // formato italiano: 15/04/2026 o 15/04/26
+      const m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/.exec(s);
       if (!m) return null;
       const g = parseInt(m[1], 10), me = parseInt(m[2], 10);
       let a = parseInt(m[3], 10); if (a < 100) a += 2000;
@@ -128,6 +140,12 @@
       return new Date(a, me - 1, g);
     }
     const meseAbbrLabel = (d) => (d ? `${MESI_ABBR[d.getMonth()]} ${d.getFullYear()}` : "");
+    // paracadute: se la Data non si legge, normalizza l'etichetta della colonna "Mese" del foglio
+    function meseDaEtichetta(label) {
+      const { meseIdx, anno } = infoMese(label || "");
+      if (meseIdx === -1 || !anno) return "";
+      return `${MESI_ABBR[meseIdx]} ${anno}`;
+    }
 
     const euro = (n) =>
       Math.abs(n).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -165,7 +183,7 @@
     }
 
     function useSheetData() {
-      const [state, setState] = useState({ loading: true, error: null, rows: [], budgetManuale: {} });
+      const [state, setState] = useState({ loading: true, error: null, rows: [], scartate: 0, budgetManuale: {} });
       const [tick, setTick] = useState(0);
       const ricarica = () => {
         setState((s) => ({ ...s, loading: true, error: null }));
@@ -198,13 +216,22 @@
                   // Importo e Mese vengono ricavati dalle colonne sorgente (Importo, Data):
                   // le colonne calcolate del foglio ("importo ricalcolato", "Mese") non sono più usate.
                   importo: parseImporto(r["Importo"], tipo),
-                  mese: meseAbbrLabel(dataObj),
+                  // mese dalla Data; se la data non si legge, dalla colonna "Mese" del foglio
+                  mese: meseAbbrLabel(dataObj) || meseDaEtichetta(r["Mese"]),
                   // Movimenti tra conti propri: esclusi dai totali, contati a parte.
                   trasferimento: categoria === "Trasferimento" || /^trasf/i.test(tipo),
                 };
               })
-              .filter((r) => r.dataObj && (r.tipo === "Spesa" || r.tipo === "Entrata" || /^trasf/i.test(r.tipo)))
-              .sort((a, b) => a.dataObj - b.dataObj);
+              .filter((r) => r.tipo === "Spesa" || r.tipo === "Entrata" || /^trasf/i.test(r.tipo));
+          })
+          .then((tutte) => {
+            const rows = tutte.filter((r) => r.mese);
+            rows.sort((a, b) => {
+              const ka = a.dataObj ? a.dataObj.getTime() : chiaveOrdinamentoMese(a.mese, 0) * 1e10;
+              const kb = b.dataObj ? b.dataObj.getTime() : chiaveOrdinamentoMese(b.mese, 0) * 1e10;
+              return ka - kb;
+            });
+            return { rows, scartate: tutte.length - rows.length };
           });
 
         // il foglio "Budget" è opzionale: se non esiste, si prosegue con i budget automatici
@@ -224,11 +251,11 @@
           .catch(() => ({}));
 
         Promise.all([caricaTransazioni, caricaBudget])
-          .then(([rows, budgetManuale]) => {
-            if (!cancelled) setState({ loading: false, error: null, rows, budgetManuale });
+          .then(([{ rows, scartate }, budgetManuale]) => {
+            if (!cancelled) setState({ loading: false, error: null, rows, scartate, budgetManuale });
           })
           .catch((err) => {
-            if (!cancelled) setState({ loading: false, error: err.message, rows: [], budgetManuale: {} });
+            if (!cancelled) setState({ loading: false, error: err.message, rows: [], scartate: 0, budgetManuale: {} });
           });
 
         return () => { cancelled = true; };
@@ -571,7 +598,7 @@
     }
 
     function Dashboard() {
-      const { loading, error, rows, budgetManuale, ricarica } = useSheetData();
+      const { loading, error, rows, scartate, budgetManuale, ricarica } = useSheetData();
       const [drawerTrasf, setDrawerTrasf] = useState(false);
 
       const mesiDisponibili = useMemo(() => {
@@ -873,6 +900,11 @@
                       </button>
                     )}
                   </div>
+                  {!loading && !error && scartate > 0 && (
+                    <div className="text-xs mt-0.5" style={{ color: C.amber, fontFamily: fontBody }}>
+                      {scartate} {scartate === 1 ? "riga ignorata" : "righe ignorate"}: data e mese non leggibili nel foglio.
+                    </div>
+                  )}
                 </div>
               </div>
               {mesiDisponibili.length > 0 && (
