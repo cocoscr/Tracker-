@@ -53,6 +53,8 @@ import {
   Ticket,
   ParkingCircle,
   ArrowLeftRight,
+  Receipt,
+  Landmark,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ *
@@ -61,6 +63,7 @@ import {
 const SHEET_ID = "1J36Imy-qTi4Ubr3s-CuzBcgzU1PGtDSQlsjE0Ap3zIY";
 const SHEET_TRANSAZIONI = "Transazioni";
 const SHEET_RICORRENTI = "Ricorrenti";
+const SHEET_CONTI = "Conti";
 
 const csvUrl = (nome) =>
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
@@ -238,6 +241,8 @@ function useSheetData() {
     rows: [],
     ricorrenti: [],
     ricorrentiOk: false,
+    conti: [],
+    contiOk: false,
   });
 
   useEffect(() => {
@@ -285,8 +290,29 @@ function useSheetData() {
       })
       .catch(() => ({ ok: false, list: [] }));
 
-    Promise.all([pTx, pRic])
-      .then(([rows, ric]) => {
+    // Il tab Conti è opzionale, stessa trappola gviz del tab Ricorrenti:
+    // se non esiste torna il primo foglio, quindi si validano le intestazioni.
+    const pConti = fetchCsv(SHEET_CONTI)
+      .then((csv) => {
+        const parsed = Papa.parse(csv, { header: true, skipEmptyLines: true });
+        const cols = (parsed.meta?.fields || []).map((f) => String(f).trim().toLowerCase());
+        const valido = ["conto", "saldo"].every((c) => cols.includes(c));
+        if (!valido) return { ok: false, list: [] };
+        return {
+          ok: true,
+          list: parsed.data
+            .map((r) => ({
+              conto: (r["Conto"] || "").trim(),
+              saldo: parseImporto(r["Saldo"]),
+              aggiornato: (r["Aggiornato il"] || r["Aggiornato"] || "").trim(),
+            }))
+            .filter((r) => r.conto),
+        };
+      })
+      .catch(() => ({ ok: false, list: [] }));
+
+    Promise.all([pTx, pRic, pConti])
+      .then(([rows, ric, cnt]) => {
         if (cancelled) return;
         setState({
           loading: false,
@@ -294,6 +320,8 @@ function useSheetData() {
           rows,
           ricorrenti: ric.list,
           ricorrentiOk: ric.ok,
+          conti: cnt.list,
+          contiOk: cnt.ok,
         });
       })
       .catch((err) => {
@@ -304,6 +332,8 @@ function useSheetData() {
             rows: [],
             ricorrenti: [],
             ricorrentiOk: false,
+            conti: [],
+            contiOk: false,
           });
       });
 
@@ -437,9 +467,9 @@ function BottomSheet({ open, title, subtitle, onClose, children }) {
 /* ------------------------------------------------------------------ *
  *  COMPONENTI HOME
  * ------------------------------------------------------------------ */
-function MiniStat({ label, value, tone, icon: Icon }) {
-  return (
-    <div style={{ flex: 1, minWidth: 0 }}>
+function MiniStat({ label, value, tone, icon: Icon, onClick }) {
+  const contenuto = (
+    <>
       <div
         style={{
           display: "flex",
@@ -454,8 +484,92 @@ function MiniStat({ label, value, tone, icon: Icon }) {
       >
         <Icon size={12} />
         {label}
+        {onClick && <ChevronRight size={11} style={{ marginLeft: -2 }} />}
       </div>
       <div style={{ color: tone, fontFamily: fontDisplay, fontWeight: 700, fontSize: "0.98rem" }}>€ {euro(value)}</div>
+    </>
+  );
+  if (!onClick) return <div style={{ flex: 1, minWidth: 0 }}>{contenuto}</div>;
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        textAlign: "left",
+        background: "transparent",
+        border: "none",
+        padding: 0,
+        cursor: "pointer",
+      }}
+    >
+      {contenuto}
+    </button>
+  );
+}
+
+/* Riga singola transazione (pannelli Transazioni ed Entrate) */
+function TransazioneRow({ t }) {
+  const Icon = iconFor(t.categoria);
+  const entrata = t.tipo === "Entrata";
+  const colore = entrata ? C.green : coloreFor(t.categoria);
+  const dataLabel = t.dataObj
+    ? t.dataObj.toLocaleDateString("it-IT", { day: "numeric", month: "short" })
+    : t.data || "";
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "10px 0",
+        borderBottom: `1px solid ${C.hairline}`,
+      }}
+    >
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 10,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: C.surfaceAlt,
+          color: colore,
+          flexShrink: 0,
+        }}
+      >
+        <Icon size={15} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            color: C.ink,
+            fontFamily: fontBody,
+            fontWeight: 600,
+            fontSize: "0.87rem",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {t.descrizione || t.categoria}
+        </div>
+        <div style={{ color: C.inkMuted, fontFamily: fontBody, fontSize: "0.72rem", marginTop: 2 }}>
+          {dataLabel} · {t.categoria}
+        </div>
+      </div>
+      <div
+        style={{
+          color: entrata ? C.green : C.ink,
+          fontFamily: fontDisplay,
+          fontWeight: 700,
+          fontSize: "0.87rem",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {entrata ? "+" : "−"} € {euro(t.importo)}
+      </div>
     </div>
   );
 }
@@ -861,7 +975,7 @@ function RicorrenteRow({ r }) {
  *  APP
  * ------------------------------------------------------------------ */
 export default function Dashboard() {
-  const { loading, error, rows, ricorrenti, ricorrentiOk } = useSheetData();
+  const { loading, error, rows, ricorrenti, ricorrentiOk, conti, contiOk } = useSheetData();
   const [panel, setPanel] = useState(null);
   const [catSel, setCatSel] = useState(null);
 
@@ -947,6 +1061,22 @@ export default function Dashboard() {
   }, [righeMese]);
 
   const maxCat = categorie.length ? Math.max(...categorie.map((c) => c.valore)) : 0;
+
+  // transazioni del mese, dalla più recente
+  const transazioniMese = useMemo(
+    () =>
+      righeMese
+        .slice()
+        .sort((a, b) => (b.dataObj?.getTime() || 0) - (a.dataObj?.getTime() || 0)),
+    [righeMese]
+  );
+
+  const entrateMese = useMemo(
+    () => transazioniMese.filter((r) => r.tipo === "Entrata"),
+    [transazioniMese]
+  );
+
+  const totaleConti = useMemo(() => conti.reduce((s, c) => s + c.saldo, 0), [conti]);
 
   // se la categoria selezionata sparisce (cambio mese, dati ricaricati) resetta
   useEffect(() => {
@@ -1124,8 +1254,38 @@ export default function Dashboard() {
                 marginBottom: 14,
               }}
             >
-              <div style={{ color: C.inkMuted, fontSize: "0.7rem", letterSpacing: "0.08em", marginBottom: 6 }}>
-                {isMeseCorrente ? "DISPONIBILE OGGI" : `SALDO — ${(mese || "").toUpperCase()}`}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  marginBottom: 6,
+                }}
+              >
+                <div style={{ color: C.inkMuted, fontSize: "0.7rem", letterSpacing: "0.08em" }}>
+                  {isMeseCorrente ? "ENTRATE − USCITE · QUESTO MESE" : `ENTRATE − USCITE — ${(mese || "").toUpperCase()}`}
+                </div>
+                <button
+                  onClick={() => setPanel("saldi")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    background: C.surfaceAlt,
+                    border: `1px solid ${C.hairline}`,
+                    color: contiOk ? C.green : C.inkMuted,
+                    borderRadius: 999,
+                    padding: "6px 11px",
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    flexShrink: 0,
+                    cursor: "pointer",
+                  }}
+                >
+                  <Landmark size={12} />
+                  Saldi
+                </button>
               </div>
               <div
                 style={{
@@ -1187,7 +1347,13 @@ export default function Dashboard() {
               )}
 
               <div style={{ display: "flex", gap: 14, marginTop: 16 }}>
-                <MiniStat label="ENTRATE" value={entrate} tone={C.green} icon={ArrowUpRight} />
+                <MiniStat
+                  label="ENTRATE"
+                  value={entrate}
+                  tone={C.green}
+                  icon={ArrowUpRight}
+                  onClick={() => setPanel("entrate")}
+                />
                 <MiniStat label="SPESO" value={speso} tone={C.coral} icon={ArrowDownRight} />
                 {isMeseCorrente && (
                   <MiniStat label="DA PAGARE" value={daPagare} tone={C.amber} icon={CalendarClock} />
@@ -1206,6 +1372,17 @@ export default function Dashboard() {
                     : "Nessuna spesa nel periodo"
                 }
                 onClick={() => setPanel("categorie")}
+              />
+              <Tile
+                icon={Receipt}
+                titolo="Transazioni"
+                accent={C.inkMuted}
+                sub={
+                  transazioniMese.length
+                    ? `${transazioniMese.length} movimenti in ${mese || ""}`
+                    : "Nessun movimento nel periodo"
+                }
+                onClick={() => setPanel("transazioni")}
               />
               {ricorrentiOk && (
                 <Tile
@@ -1264,6 +1441,157 @@ export default function Dashboard() {
                   onSelect={toggleCat}
                 />
               ))}
+            </div>
+          </>
+        )}
+      </BottomSheet>
+
+      <BottomSheet
+        open={panel === "transazioni"}
+        title="Transazioni"
+        subtitle={`${mese || ""} · ${transazioniMese.length} movimenti`}
+        onClose={closePanel}
+      >
+        {transazioniMese.length === 0 ? (
+          <div style={{ color: C.inkMuted, textAlign: "center", padding: "30px 0", fontSize: "0.88rem" }}>
+            Nessun movimento registrato in questo mese.
+          </div>
+        ) : (
+          transazioniMese.map((t, i) => <TransazioneRow key={`${t.data}-${t.descrizione}-${i}`} t={t} />)
+        )}
+      </BottomSheet>
+
+      <BottomSheet
+        open={panel === "entrate"}
+        title="Entrate"
+        subtitle={`${mese || ""} · € ${euro(entrate)} totali`}
+        onClose={closePanel}
+      >
+        {entrateMese.length === 0 ? (
+          <div style={{ color: C.inkMuted, textAlign: "center", padding: "30px 0", fontSize: "0.88rem" }}>
+            Nessuna entrata registrata in questo mese.
+          </div>
+        ) : (
+          <>
+            {entrateMese.map((t, i) => (
+              <TransazioneRow key={`${t.data}-${t.descrizione}-${i}`} t={t} />
+            ))}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                paddingTop: 14,
+                marginTop: 4,
+              }}
+            >
+              <span style={{ color: C.inkMuted, fontSize: "0.8rem", letterSpacing: "0.05em" }}>TOTALE ENTRATE</span>
+              <span style={{ color: C.green, fontFamily: fontDisplay, fontWeight: 700, fontSize: "1.2rem" }}>
+                € {euro(entrate)}
+              </span>
+            </div>
+          </>
+        )}
+      </BottomSheet>
+
+      <BottomSheet
+        open={panel === "saldi"}
+        title="Saldi conti"
+        subtitle={contiOk ? `${conti.length} conti` : undefined}
+        onClose={closePanel}
+      >
+        {!contiOk ? (
+          <div style={{ color: C.inkMuted, fontSize: "0.86rem", lineHeight: 1.65 }}>
+            Aggiungi al foglio Google un tab chiamato <b style={{ color: C.ink }}>Conti</b> con le colonne:
+            <div
+              style={{
+                marginTop: 10,
+                padding: 12,
+                borderRadius: 12,
+                background: C.surfaceAlt,
+                fontFamily: fontDisplay,
+                fontSize: "0.78rem",
+                color: C.amber,
+              }}
+            >
+              Conto · Saldo · Aggiornato il
+            </div>
+            <div style={{ marginTop: 10 }}>
+              Una riga per ogni conto (Fineco, Trade Republic, …). I saldi li aggiorni a mano quando vuoi; “Aggiornato
+              il” serve solo a ricordarti quando l’hai fatto l’ultima volta.
+            </div>
+          </div>
+        ) : (
+          <>
+            {conti.map((c, i) => (
+              <div
+                key={`${c.conto}-${i}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "12px 0",
+                  borderBottom: `1px solid ${C.hairline}`,
+                }}
+              >
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 10,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: C.surfaceAlt,
+                    color: C.green,
+                    flexShrink: 0,
+                  }}
+                >
+                  <Landmark size={15} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: C.ink, fontFamily: fontBody, fontWeight: 600, fontSize: "0.88rem" }}>
+                    {c.conto}
+                  </div>
+                  {c.aggiornato && (
+                    <div style={{ color: C.inkMuted, fontFamily: fontBody, fontSize: "0.72rem", marginTop: 2 }}>
+                      Aggiornato il {c.aggiornato}
+                    </div>
+                  )}
+                </div>
+                <div
+                  style={{
+                    color: c.saldo >= 0 ? C.ink : C.coral,
+                    fontFamily: fontDisplay,
+                    fontWeight: 700,
+                    fontSize: "0.92rem",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  € {euro(c.saldo)}
+                </div>
+              </div>
+            ))}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                paddingTop: 14,
+                marginTop: 4,
+              }}
+            >
+              <span style={{ color: C.inkMuted, fontSize: "0.8rem", letterSpacing: "0.05em" }}>SALDO ATTUALE</span>
+              <span
+                style={{
+                  color: totaleConti >= 0 ? C.green : C.coral,
+                  fontFamily: fontDisplay,
+                  fontWeight: 700,
+                  fontSize: "1.2rem",
+                }}
+              >
+                € {euro(totaleConti)}
+              </span>
             </div>
           </>
         )}
