@@ -195,9 +195,14 @@ function useSheetData() {
     });
 
     // Il tab Ricorrenti è opzionale: se manca, la dashboard funziona lo stesso.
+    // Attenzione: se il tab non esiste, Google NON dà errore — restituisce il primo
+    // foglio del file. Va quindi verificato che le intestazioni siano quelle giuste.
     const pRic = fetchCsv(SHEET_RICORRENTI)
       .then((csv) => {
         const parsed = Papa.parse(csv, { header: true, skipEmptyLines: true });
+        const cols = (parsed.meta?.fields || []).map((f) => String(f).trim().toLowerCase());
+        const valido = ["descrizione", "importo", "giorno"].every((c) => cols.includes(c));
+        if (!valido) return { ok: false, list: [] };
         return {
           ok: true,
           list: parsed.data
@@ -640,7 +645,14 @@ export default function Dashboard() {
         * { -webkit-tap-highlight-color: transparent; }
         button { font: inherit; }`}</style>
 
-      <div style={{ maxWidth: 620, margin: "0 auto", padding: "28px 18px 40px" }}>
+      <div
+        style={{
+          maxWidth: 620,
+          margin: "0 auto",
+          padding: "18px 18px 40px",
+          paddingTop: "calc(env(safe-area-inset-top) + 34px)",
+        }}
+      >
         {/* header */}
         <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 20 }}>
           <div
@@ -686,11 +698,15 @@ export default function Dashboard() {
                 color: C.ink,
                 border: `1px solid ${C.hairline}`,
                 borderRadius: 999,
-                padding: "7px 12px",
-                fontSize: "0.78rem",
+                padding: "0 16px",
+                height: 44,
+                minWidth: 108,
+                fontSize: "0.85rem",
                 fontFamily: fontBody,
                 fontWeight: 600,
                 appearance: "none",
+                textAlign: "center",
+                textAlignLast: "center",
               }}
             >
               {mesiDisponibili
@@ -833,21 +849,21 @@ export default function Dashboard() {
                 }
                 onClick={() => setPanel("categorie")}
               />
-              <Tile
-                icon={CalendarClock}
-                titolo="Da pagare"
-                accent={C.coral}
-                sub={
-                  !ricorrentiOk
-                    ? "Crea il foglio “Ricorrenti”"
-                    : !isMeseCorrente
-                    ? "Solo per il mese in corso"
-                    : daPagare > 0
-                    ? `€ ${euro(daPagare)} nei prossimi ${giorniRestanti} giorni`
-                    : "Tutto pagato, per ora"
-                }
-                onClick={() => setPanel("dapagare")}
-              />
+              {ricorrentiOk && (
+                <Tile
+                  icon={CalendarClock}
+                  titolo="Da pagare"
+                  accent={C.coral}
+                  sub={
+                    !isMeseCorrente
+                      ? "Solo per il mese in corso"
+                      : daPagare > 0
+                      ? `€ ${euro(daPagare)} nei prossimi ${giorniRestanti} giorni`
+                      : "Tutto pagato, per ora"
+                  }
+                  onClick={() => setPanel("dapagare")}
+                />
+              )}
               <Tile
                 icon={TrendingUp}
                 titolo="Andamento"
