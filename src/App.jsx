@@ -632,7 +632,7 @@ export default function Dashboard() {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        minHeight: "100dvh",
         width: "100%",
         background: C.bg,
         fontFamily: fontBody,
@@ -649,8 +649,10 @@ export default function Dashboard() {
         style={{
           maxWidth: 620,
           margin: "0 auto",
-          padding: "18px 18px 40px",
-          paddingTop: "calc(env(safe-area-inset-top) + 34px)",
+          padding: "0 18px 40px",
+          paddingTop: "max(76px, calc(env(safe-area-inset-top) + 28px))",
+          paddingLeft: "max(18px, env(safe-area-inset-left))",
+          paddingRight: "max(18px, env(safe-area-inset-right))",
         }}
       >
         {/* header */}
