@@ -3,6 +3,12 @@ import Papa from "papaparse";
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
+  PieChart as RePieChart,
+  Pie,
+  Cell,
+  Sector,
   XAxis,
   YAxis,
   Tooltip,
@@ -32,7 +38,7 @@ import {
   Tag,
   Loader2,
   AlertCircle,
-  PieChart,
+  PieChart as PieChartIcon,
   CalendarClock,
   TrendingUp,
   ChevronRight,
@@ -110,6 +116,61 @@ const iconMap = {
 const iconFor = (cat) => iconMap[cat] || Tag;
 
 /* ------------------------------------------------------------------ *
+ *  COLORI CATEGORIE
+ *  Mappa fissa per le categorie note: il colore di una categoria resta
+ *  lo stesso in ogni mese. Per le categorie non in elenco si usa un hash
+ *  deterministico sul nome, così anche quelle restano stabili nel tempo.
+ * ------------------------------------------------------------------ */
+const palette = [
+  "#E8B44C", // ambra
+  "#4ADE80", // verde
+  "#F2777B", // corallo
+  "#5EC8E5", // azzurro
+  "#B692F6", // viola
+  "#F4A261", // arancio
+  "#7DD3A0", // menta
+  "#E879A6", // rosa
+  "#94B8F0", // blu chiaro
+  "#D9C77E", // sabbia
+  "#6EE7D3", // acqua
+  "#F0906A", // terracotta
+];
+
+const coloriCategoria = {
+  Bollette: "#E8B44C",
+  Utenze: "#5EC8E5",
+  Assicurazioni: "#94B8F0",
+  "Spese Personali": "#B692F6",
+  Benzina: "#F0906A",
+  "Cibo SM": "#4ADE80",
+  "Mangiare fuori": "#7DD3A0",
+  "Uscite & Svago": "#E879A6",
+  "Pedaggi & Parcheggi": "#D9C77E",
+  "Cura Personale": "#6EE7D3",
+  Sport: "#F4A261",
+  Vestiti: "#F2777B",
+  Lavoro: "#94B8F0",
+  Salute: "#F2777B",
+  Abbonamenti: "#B692F6",
+  Casa: "#E8B44C",
+  Regali: "#E879A6",
+  Trasferte: "#5EC8E5",
+  Trasferimento: "#9CA8A1",
+  PAC: "#7DD3A0",
+  Macchina: "#F0906A",
+  "Università": "#94B8F0",
+  "Carta di Credito": "#D9C77E",
+};
+
+function coloreFor(nome) {
+  if (coloriCategoria[nome]) return coloriCategoria[nome];
+  let h = 0;
+  const s = String(nome || "");
+  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) % 100000;
+  return palette[h % palette.length];
+}
+
+/* ------------------------------------------------------------------ *
  *  UTILS
  * ------------------------------------------------------------------ */
 function parseImporto(str) {
@@ -146,6 +207,11 @@ const euro = (n) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+
+const euroCompatto = (n) => {
+  const v = Math.abs(Number(n) || 0);
+  return v >= 1000 ? `${(v / 1000).toFixed(1).replace(".", ",")}k` : Math.round(v).toString();
+};
 
 const norm = (s) =>
   String(s || "")
@@ -435,11 +501,149 @@ function Tile({ icon: Icon, titolo, sub, onClick, accent }) {
   );
 }
 
-function CategoryBar({ nome, valore, max }) {
-  const Icon = iconFor(nome);
-  const pct = max > 0 ? Math.round((valore / max) * 100) : 0;
+/* ------------------------------------------------------------------ *
+ *  PANNELLO CATEGORIE — torta interattiva
+ * ------------------------------------------------------------------ */
+
+// Fetta "estratta" quando la categoria è selezionata.
+function ActiveSlice(props) {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0" }}>
+    <g>
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={innerRadius}
+        outerRadius={outerRadius + 9}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill={fill}
+      />
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={outerRadius + 12}
+        outerRadius={outerRadius + 14}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill={fill}
+        opacity={0.45}
+      />
+    </g>
+  );
+}
+
+function CategoryDonut({ dati, selezionata, onSelect, totale }) {
+  const idxSel = selezionata ? dati.findIndex((d) => d.nome === selezionata) : -1;
+  const attiva = idxSel >= 0 ? dati[idxSel] : null;
+  const pct = attiva && totale > 0 ? Math.round((attiva.valore / totale) * 100) : 0;
+
+  return (
+    <div style={{ position: "relative", height: 232, marginBottom: 4 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <RePieChart>
+          <Pie
+            data={dati}
+            dataKey="valore"
+            nameKey="nome"
+            cx="50%"
+            cy="50%"
+            innerRadius={62}
+            outerRadius={92}
+            paddingAngle={dati.length > 1 ? 2 : 0}
+            stroke="none"
+            startAngle={90}
+            endAngle={-270}
+            activeIndex={idxSel >= 0 ? idxSel : undefined}
+            activeShape={ActiveSlice}
+            animationDuration={420}
+            onClick={(_, i) => onSelect(dati[i]?.nome)}
+            style={{ cursor: "pointer", outline: "none" }}
+          >
+            {dati.map((d) => (
+              <Cell
+                key={d.nome}
+                fill={coloreFor(d.nome)}
+                fillOpacity={idxSel < 0 || d.nome === selezionata ? 1 : 0.22}
+                style={{ outline: "none", transition: "fill-opacity 200ms" }}
+              />
+            ))}
+          </Pie>
+        </RePieChart>
+      </ResponsiveContainer>
+
+      {/* etichetta al centro */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          pointerEvents: "none",
+          padding: "0 70px",
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            color: C.inkMuted,
+            fontSize: "0.62rem",
+            letterSpacing: "0.08em",
+            marginBottom: 3,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            maxWidth: "100%",
+          }}
+        >
+          {attiva ? attiva.nome.toUpperCase() : "TOTALE SPESE"}
+        </div>
+        <div
+          style={{
+            color: attiva ? coloreFor(attiva.nome) : C.ink,
+            fontFamily: fontDisplay,
+            fontWeight: 700,
+            fontSize: attiva ? "1.24rem" : "1.34rem",
+            lineHeight: 1.1,
+          }}
+        >
+          € {euro(attiva ? attiva.valore : totale)}
+        </div>
+        <div style={{ color: C.inkMuted, fontSize: "0.68rem", marginTop: 3 }}>
+          {attiva ? `${pct}% del mese` : `${dati.length} categorie`}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Riga di legenda. Barra colorata visibile solo quando la categoria è selezionata.
+function CategoryRow({ c, max, selezionata, spenta, onSelect }) {
+  const Icon = iconFor(c.nome);
+  const colore = coloreFor(c.nome);
+  const pct = max > 0 ? Math.round((c.valore / max) * 100) : 0;
+
+  return (
+    <button
+      onClick={() => onSelect(c.nome)}
+      style={{
+        width: "100%",
+        textAlign: "left",
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "10px 10px",
+        marginBottom: 2,
+        borderRadius: 14,
+        border: `1px solid ${selezionata ? `${colore}55` : "transparent"}`,
+        background: selezionata ? `${colore}14` : "transparent",
+        opacity: spenta ? 0.4 : 1,
+        transition: "background 180ms, opacity 180ms, border-color 180ms",
+        cursor: "pointer",
+      }}
+    >
       <div
         style={{
           width: 32,
@@ -448,22 +652,136 @@ function CategoryBar({ nome, valore, max }) {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: C.surfaceAlt,
-          color: C.amber,
+          background: selezionata ? colore : C.surfaceAlt,
+          color: selezionata ? C.bg : colore,
           flexShrink: 0,
+          transition: "background 180ms, color 180ms",
         }}
       >
         <Icon size={15} />
       </div>
+
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.87rem", marginBottom: 5 }}>
-          <span style={{ color: C.ink, fontFamily: fontBody, fontWeight: 500 }}>{nome}</span>
-          <span style={{ color: C.inkMuted, fontFamily: fontDisplay }}>€ {euro(valore)}</span>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: "0.87rem" }}>
+          <span
+            style={{
+              color: C.ink,
+              fontFamily: fontBody,
+              fontWeight: selezionata ? 700 : 500,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {c.nome}
+          </span>
+          <span style={{ color: selezionata ? colore : C.inkMuted, fontFamily: fontDisplay, whiteSpace: "nowrap" }}>
+            € {euro(c.valore)}
+          </span>
         </div>
-        <div style={{ height: 6, borderRadius: 999, overflow: "hidden", background: C.hairline }}>
-          <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: C.amber }} />
+
+        {/* la barra compare solo sulla riga selezionata */}
+        <div
+          style={{
+            height: selezionata ? 6 : 0,
+            marginTop: selezionata ? 6 : 0,
+            borderRadius: 999,
+            overflow: "hidden",
+            background: C.hairline,
+            transition: "height 200ms, margin-top 200ms",
+          }}
+        >
+          <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: colore }} />
         </div>
       </div>
+    </button>
+  );
+}
+
+function TrendCategoria({ nome, dati }) {
+  const colore = coloreFor(nome);
+  const conValore = dati.filter((d) => d.valore > 0);
+  const media = conValore.length ? conValore.reduce((s, d) => s + d.valore, 0) / conValore.length : 0;
+  const ultimo = dati.length ? dati[dati.length - 1].valore : 0;
+  const delta = media > 0 ? Math.round(((ultimo - media) / media) * 100) : 0;
+
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        padding: "14px 14px 8px",
+        borderRadius: 16,
+        background: C.surfaceAlt,
+        border: `1px solid ${C.hairline}`,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+        <span style={{ color: C.inkMuted, fontSize: "0.68rem", letterSpacing: "0.06em" }}>
+          ANDAMENTO · ULTIMI {dati.length} MESI
+        </span>
+        {media > 0 && (
+          <span style={{ color: C.inkMuted, fontSize: "0.7rem", fontFamily: fontDisplay }}>
+            media € {euro(media)}
+          </span>
+        )}
+      </div>
+
+      <div style={{ height: 132 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={dati} margin={{ top: 4, right: 4, left: -26, bottom: 0 }} barCategoryGap="28%">
+            <CartesianGrid stroke={C.hairline} vertical={false} />
+            <XAxis
+              dataKey="mese"
+              stroke={C.inkMuted}
+              tick={{ fontSize: 10, fontFamily: fontBody }}
+              axisLine={false}
+              tickLine={false}
+              interval={0}
+            />
+            <YAxis
+              stroke={C.inkMuted}
+              tick={{ fontSize: 10, fontFamily: fontBody }}
+              axisLine={false}
+              tickLine={false}
+              width={46}
+              tickFormatter={euroCompatto}
+            />
+            <Tooltip
+              cursor={{ fill: "rgba(255,255,255,0.04)" }}
+              contentStyle={{
+                background: C.surface,
+                border: `1px solid ${C.hairline}`,
+                borderRadius: 10,
+                fontFamily: fontBody,
+                fontSize: 12,
+              }}
+              labelStyle={{ color: C.ink }}
+              formatter={(v) => [`€ ${euro(v)}`, nome]}
+            />
+            <Bar dataKey="valore" radius={[5, 5, 0, 0]} animationDuration={420}>
+              {dati.map((d, i) => (
+                <Cell key={d.mese} fill={colore} fillOpacity={i === dati.length - 1 ? 1 : 0.42} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {media > 0 && dati.length > 1 && (
+        <div
+          style={{
+            color: delta > 0 ? C.coral : delta < 0 ? C.green : C.inkMuted,
+            fontSize: "0.74rem",
+            padding: "8px 2px 4px",
+          }}
+        >
+          {delta > 0
+            ? `Questo mese ${delta}% sopra la media`
+            : delta < 0
+            ? `Questo mese ${Math.abs(delta)}% sotto la media`
+            : "In linea con la media"}
+        </div>
+      )}
     </div>
   );
 }
@@ -545,7 +863,18 @@ function RicorrenteRow({ r }) {
 export default function Dashboard() {
   const { loading, error, rows, ricorrenti, ricorrentiOk } = useSheetData();
   const [panel, setPanel] = useState(null);
-  const closePanel = useCallback(() => setPanel(null), []);
+  const [catSel, setCatSel] = useState(null);
+
+  const closePanel = useCallback(() => {
+    setPanel(null);
+    setCatSel(null);
+  }, []);
+
+  // tap sulla stessa categoria = deseleziona
+  const toggleCat = useCallback((nome) => {
+    if (!nome) return;
+    setCatSel((prev) => (prev === nome ? null : nome));
+  }, []);
 
   const oggi = useMemo(() => new Date(), []);
 
@@ -558,6 +887,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (!mese && mesiDisponibili.length > 0) setMese(mesiDisponibili[mesiDisponibili.length - 1]);
   }, [mesiDisponibili, mese]);
+
+  // cambiando mese la selezione non ha più senso
+  useEffect(() => {
+    setCatSel(null);
+  }, [mese]);
 
   const isMeseCorrente = mese && mese === mesiDisponibili[mesiDisponibili.length - 1];
 
@@ -614,6 +948,27 @@ export default function Dashboard() {
 
   const maxCat = categorie.length ? Math.max(...categorie.map((c) => c.valore)) : 0;
 
+  // se la categoria selezionata sparisce (cambio mese, dati ricaricati) resetta
+  useEffect(() => {
+    if (catSel && !categorie.some((c) => c.nome === catSel)) setCatSel(null);
+  }, [categorie, catSel]);
+
+  // ultimi 6 mesi FINO al mese selezionato, per la categoria scelta
+  const trendCategoria = useMemo(() => {
+    if (!catSel) return [];
+    const idx = mesiDisponibili.indexOf(mese);
+    if (idx < 0) return [];
+    const finestra = mesiDisponibili.slice(Math.max(0, idx - 5), idx + 1);
+    return finestra.map((m) => ({
+      mese: m,
+      valore: Math.round(
+        rows
+          .filter((r) => r.mese === m && r.tipo === "Spesa" && r.categoria === catSel)
+          .reduce((s, r) => s + Math.abs(r.importo), 0)
+      ),
+    }));
+  }, [catSel, mese, mesiDisponibili, rows]);
+
   const trend = useMemo(
     () =>
       mesiDisponibili.slice(-6).map((m) => {
@@ -643,7 +998,8 @@ export default function Dashboard() {
         @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @keyframes spin { to { transform: rotate(360deg); } }
         * { -webkit-tap-highlight-color: transparent; }
-        button { font: inherit; }`}</style>
+        button { font: inherit; }
+        .recharts-sector:focus, .recharts-wrapper:focus, svg:focus { outline: none; }`}</style>
 
       <div
         style={{
@@ -842,7 +1198,7 @@ export default function Dashboard() {
             {/* TESSERE */}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <Tile
-                icon={PieChart}
+                icon={PieChartIcon}
                 titolo="Categorie"
                 sub={
                   categorie.length
@@ -882,7 +1238,9 @@ export default function Dashboard() {
       <BottomSheet
         open={panel === "categorie"}
         title="Categorie"
-        subtitle={`${mese || ""} · € ${euro(speso)} spesi`}
+        subtitle={
+          catSel ? `${mese || ""} · tocca di nuovo per tornare al totale` : `${mese || ""} · € ${euro(speso)} spesi`
+        }
         onClose={closePanel}
       >
         {categorie.length === 0 ? (
@@ -890,7 +1248,24 @@ export default function Dashboard() {
             Nessuna spesa registrata in questo mese.
           </div>
         ) : (
-          categorie.map((c) => <CategoryBar key={c.nome} {...c} max={maxCat} />)
+          <>
+            <CategoryDonut dati={categorie} selezionata={catSel} onSelect={toggleCat} totale={speso} />
+
+            {catSel && trendCategoria.length > 0 && <TrendCategoria nome={catSel} dati={trendCategoria} />}
+
+            <div style={{ marginTop: 14 }}>
+              {categorie.map((c) => (
+                <CategoryRow
+                  key={c.nome}
+                  c={c}
+                  max={maxCat}
+                  selezionata={catSel === c.nome}
+                  spenta={Boolean(catSel) && catSel !== c.nome}
+                  onSelect={toggleCat}
+                />
+              ))}
+            </div>
+          </>
         )}
       </BottomSheet>
 
