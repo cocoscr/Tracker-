@@ -284,6 +284,7 @@ function useSheetData() {
               categoria: (r["Categoria"] || "Altro").trim() || "Altro",
               attivo: !/^(no|false|0|n)$/i.test(String(r["Attivo"] ?? "si").trim()),
               note: (r["Note"] || "").trim(),
+              conto: (r["Conto"] || "").trim(),
             }))
             .filter((r) => r.descrizione && r.attivo && r.importo > 0),
         };
@@ -1045,6 +1046,41 @@ export default function Dashboard() {
     [ricorrentiStato]
   );
 
+  // --- ricorrenti raggruppate per conto -------------------------------------
+  // Il join si appoggia ai nomi conto del foglio: dal 04/08/2026 sono uniformati
+  // (Fineco / Trade Republic / Revolut / Buddy Bank) su Transazioni, Ricorrenti e Conti.
+  // Il match resta comunque tollerante (trim + case-insensitive) per non rompersi
+  // se in futuro rientra una riga scritta a mano.
+  const ricorrentiPerConto = useMemo(() => {
+    const gruppi = new Map();
+    ricorrentiStato.forEach((r) => {
+      const nome = (r.conto || "").trim();
+      const key = nome.toLowerCase() || "__senza__";
+      if (!gruppi.has(key)) gruppi.set(key, { conto: nome, voci: [], residuo: 0, totale: 0 });
+      const g = gruppi.get(key);
+      g.voci.push(r);
+      g.totale += r.importo;
+      if (r.stato !== "pagata") g.residuo += r.importo;
+    });
+
+    const saldoDi = (nome) => {
+      const k = nome.trim().toLowerCase();
+      const c = conti.find((x) => x.conto.trim().toLowerCase() === k);
+      return c ? c.saldo : null;
+    };
+
+    return [...gruppi.values()]
+      .map((g) => {
+        const saldo = g.conto ? saldoDi(g.conto) : null;
+        return { ...g, saldo, dopo: saldo === null ? null : saldo - g.residuo };
+      })
+      .sort((a, b) => {
+        if (!a.conto) return 1; // "senza conto" sempre in fondo
+        if (!b.conto) return -1;
+        return b.residuo - a.residuo || a.conto.localeCompare(b.conto);
+      });
+  }, [ricorrentiStato, conti]);
+
   const saldoOggi = entrate - speso;
   const saldoProiettato = saldoOggi - daPagare;
 
@@ -1638,9 +1674,66 @@ export default function Dashboard() {
           </div>
         ) : (
           <>
-            {ricorrentiStato.map((r, i) => (
-              <RicorrenteRow key={`${r.descrizione}-${i}`} r={r} />
-            ))}
+            {ricorrentiPerConto.length === 1 && !ricorrentiPerConto[0].conto
+              ? ricorrentiStato.map((r, i) => <RicorrenteRow key={`${r.descrizione}-${i}`} r={r} />)
+              : ricorrentiPerConto.map((g, gi) => (
+                  <div key={g.conto || "__senza__"} style={{ marginTop: gi === 0 ? 0 : 18 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "baseline",
+                        gap: 10,
+                        paddingBottom: 6,
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: g.conto ? C.ink : C.inkMuted,
+                          fontFamily: fontBody,
+                          fontWeight: 700,
+                          fontSize: "0.78rem",
+                          letterSpacing: "0.06em",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {g.conto || "Senza conto"}
+                      </span>
+                      <span
+                        style={{
+                          color: g.residuo > 0 ? C.amber : C.green,
+                          fontFamily: fontDisplay,
+                          fontWeight: 700,
+                          fontSize: "0.86rem",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        € {euro(g.residuo)}
+                      </span>
+                    </div>
+
+                    {g.saldo !== null && (
+                      <div
+                        style={{
+                          color: C.inkMuted,
+                          fontFamily: fontBody,
+                          fontSize: "0.72rem",
+                          paddingBottom: 8,
+                        }}
+                      >
+                        saldo € {euro(g.saldo)} →{" "}
+                        <span style={{ color: g.dopo < 0 ? C.coral : C.inkMuted, fontWeight: 600 }}>
+                          € {euro(g.dopo)}
+                        </span>{" "}
+                        dopo le ricorrenti
+                      </div>
+                    )}
+
+                    {g.voci.map((r, i) => (
+                      <RicorrenteRow key={`${r.descrizione}-${i}`} r={r} />
+                    ))}
+                  </div>
+                ))}
             <div
               style={{
                 display: "flex",
