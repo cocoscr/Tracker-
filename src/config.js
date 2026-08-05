@@ -1,5 +1,6 @@
 /* ------------------------------------------------------------------ *
  *  CONFIG — le cose che cambierai più spesso stanno qui
+ *  TEMA: Tron Legacy (ciano su nero, arancio Clu per i negativi)
  * ------------------------------------------------------------------ */
 
 import {
@@ -24,21 +25,28 @@ export const csvUrl = (nome) =>
 // (investire e spostare soldi tra conti propri non è "spendere")
 export const CATEGORIE_NON_SPESA = ["PAC", "Trasferimento"];
 
-// ---- tema ----
+/* ------------------------------------------------------------------ *
+ *  TEMA — Tron Legacy
+ *  bg/surface: nero bluastro, come la Griglia
+ *  green  → ciano dei programmi "buoni" (usato per i valori positivi)
+ *  coral  → arancio Clu (valori negativi, ritardi)
+ *  amber  → oro dei circuiti (avvisi, PAC)
+ *  blue   → ciano chiaro (investimenti)
+ * ------------------------------------------------------------------ */
 export const C = {
-  bg: "#0F1613",
-  surface: "#171F1B",
-  surfaceAlt: "#1D2622",
-  hairline: "#2A3630",
-  ink: "#F4F1E8",
-  inkMuted: "#9CA8A1",
-  paper: "#F7F3E9",
-  paperInk: "#241F16",
-  paperMuted: "#8A8073",
-  green: "#4ADE80",
-  coral: "#F2777B",
-  amber: "#E8B44C",
-  blue: "#7FB3D5",
+  bg: "#050A0F",
+  surface: "#0A151D",
+  surfaceAlt: "#0F2029",
+  hairline: "#1A3D4D",
+  ink: "#E8FBFF",
+  inkMuted: "#6E94A5",
+  paper: "#E8FBFF",
+  paperInk: "#050A0F",
+  paperMuted: "#4A7185",
+  green: "#4DE2F7",
+  coral: "#FF6A1A",
+  amber: "#FFC947",
+  blue: "#7DF9FF",
 };
 
 export const fontDisplay = "'Space Mono', ui-monospace, 'SF Mono', Menlo, monospace";

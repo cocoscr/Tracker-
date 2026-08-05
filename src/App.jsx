@@ -17,12 +17,14 @@ import {
   CalendarClock,
   TrendingUp,
   Landmark,
+  ReceiptText,
 } from "lucide-react";
 import { C, fontBody, fontDisplay } from "./config.js";
 import { euro, norm, giorniNelMese } from "./utils.js";
 import { useSheetData } from "./useSheetData.js";
 import { MiniStat, Tile } from "./components/Ui.jsx";
 import { PanelCategorie, PanelDaPagare, PanelTrend } from "./panels/Panels.jsx";
+import PanelMovimenti from "./panels/PanelMovimenti.jsx";
 import PanelPatrimonio from "./panels/PanelPatrimonio.jsx";
 
 export default function Dashboard() {
@@ -320,6 +322,16 @@ export default function Dashboard() {
             {/* TESSERE */}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <Tile
+                icon={ReceiptText}
+                titolo="Transazioni"
+                sub={
+                  righeMese.length
+                    ? `${righeMese.length} movimenti in ${mese}`
+                    : "Nessun movimento nel periodo"
+                }
+                onClick={() => setPanel("movimenti")}
+              />
+              <Tile
                 icon={PieChart}
                 titolo="Categorie"
                 sub={
@@ -362,6 +374,8 @@ export default function Dashboard() {
       </div>
 
       {/* ---------------- PANNELLI ---------------- */}
+      <PanelMovimenti open={panel === "movimenti"} onClose={closePanel} righeMese={righeMese} mese={mese} />
+
       <PanelCategorie
         open={panel === "categorie"}
         onClose={closePanel}
