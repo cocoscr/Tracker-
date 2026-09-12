@@ -5,7 +5,7 @@
 import { useState, useEffect } from "react";
 import Papa from "papaparse";
 import { csvUrl, SHEET_TRANSAZIONI, SHEET_RICORRENTI } from "./config.js";
-import { parseImporto, parseData } from "./utils.js";
+import { parseImporto, parseData, meseDaData } from "./utils.js";
 
 export function fetchCsv(nome) {
   return fetch(csvUrl(nome)).then((res) => {
@@ -39,17 +39,26 @@ export function useSheetData() {
     const pTx = fetchCsv(SHEET_TRANSAZIONI).then((csv) => {
       const parsed = Papa.parse(csv, { header: true, skipEmptyLines: true });
       return parsed.data
-        .map((r) => ({
-          data: r["Data"],
-          dataObj: parseData(r["Data"]),
-          tipo: (r["Tipo"] || "").trim(),
-          descrizione: r["Descrizione"] || "",
-          categoria: (r["Categoria"] || "Altro").trim() || "Altro",
-          metodo: r["Metodo"],
-          conto: r["Conto"],
-          importo: parseImporto(r["importo ricalcolato"] ?? r["Importo"]),
-          mese: (r["Mese"] || "").trim(),
-        }))
+        .map((r) => {
+          const dataObj = parseData(r["Data"]);
+          // "importo ricalcolato" (col. H) è una formula: sulla riga appena scritta
+          // dal comando rapido può essere vuota → si ripiega su "Importo" (col. B).
+          const ric = (r["importo ricalcolato"] || "").trim();
+          const tipo = (r["Tipo"] || "").trim();
+          let importo = parseImporto(ric || r["Importo"]);
+          if (!ric && tipo === "Spesa") importo = -Math.abs(importo);
+          return {
+            data: r["Data"],
+            dataObj,
+            tipo,
+            descrizione: r["Descrizione"] || "",
+            categoria: (r["Categoria"] || "Altro").trim() || "Altro",
+            metodo: r["Metodo"],
+            conto: r["Conto"],
+            importo,
+            mese: (r["Mese"] || "").trim() || meseDaData(dataObj),
+          };
+        })
         .filter((r) => r.tipo === "Spesa" || r.tipo === "Entrata");
     });
 

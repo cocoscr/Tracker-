@@ -25,6 +25,14 @@ export const csvUrl = (nome) =>
 // (investire e spostare soldi tra conti propri non è "spendere")
 export const CATEGORIE_NON_SPESA = ["PAC", "Trasferimento"];
 
+// ---- categorie escluse da SPESO, categorie, andamento e feedback ----
+// Oltre a quelle sopra: "Carta di Credito" è l'addebito mensile AMEX, ma le
+// singole spese AMEX sono già registrate una per una → conterebbe due volte.
+// DEVE restare identico a ESCLUSE_DAL_TOTALE in apps-script/doPost.gs,
+// altrimenti la notifica sull'iPhone e la dashboard dicono numeri diversi.
+export const ESCLUSE_DAL_TOTALE = ["Carta di Credito", ...CATEGORIE_NON_SPESA];
+export const contaNelTotale = (r) => !ESCLUSE_DAL_TOTALE.includes(r.categoria);
+
 /* ------------------------------------------------------------------ *
  *  TEMA — Tron Legacy
  *  bg/surface: nero bluastro, come la Griglia

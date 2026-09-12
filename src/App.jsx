@@ -19,10 +19,11 @@ import {
   Landmark,
   ReceiptText,
 } from "lucide-react";
-import { C, fontBody, fontDisplay } from "./config.js";
+import { C, fontBody, fontDisplay, contaNelTotale } from "./config.js";
 import { euro, norm, giorniNelMese } from "./utils.js";
 import { useSheetData } from "./useSheetData.js";
 import { MiniStat, Tile } from "./components/Ui.jsx";
+import UltimaTransazione from "./components/UltimaTransazione.jsx";
 import { PanelCategorie, PanelDaPagare, PanelTrend } from "./panels/Panels.jsx";
 import PanelMovimenti from "./panels/PanelMovimenti.jsx";
 import PanelPatrimonio from "./panels/PanelPatrimonio.jsx";
@@ -49,8 +50,13 @@ export default function Dashboard() {
     () => righeMese.filter((r) => r.tipo === "Entrata").reduce((s, r) => s + Math.abs(r.importo), 0),
     [righeMese]
   );
+  // SPESO esclude Carta di Credito (doppio conteggio AMEX), PAC e Trasferimento:
+  // vedi ESCLUSE_DAL_TOTALE in config.js. Stessa regola del feedback post-pagamento.
   const speso = useMemo(
-    () => righeMese.filter((r) => r.tipo === "Spesa").reduce((s, r) => s + Math.abs(r.importo), 0),
+    () =>
+      righeMese
+        .filter((r) => r.tipo === "Spesa" && contaNelTotale(r))
+        .reduce((s, r) => s + Math.abs(r.importo), 0),
     [righeMese]
   );
 
@@ -85,7 +91,7 @@ export default function Dashboard() {
   const categorie = useMemo(() => {
     const map = {};
     righeMese
-      .filter((r) => r.tipo === "Spesa")
+      .filter((r) => r.tipo === "Spesa" && contaNelTotale(r))
       .forEach((r) => {
         map[r.categoria] = (map[r.categoria] || 0) + Math.abs(r.importo);
       });
@@ -103,11 +109,27 @@ export default function Dashboard() {
         return {
           mese: m,
           Entrate: Math.round(righe.filter((r) => r.tipo === "Entrata").reduce((s, r) => s + Math.abs(r.importo), 0)),
-          Uscite: Math.round(righe.filter((r) => r.tipo === "Spesa").reduce((s, r) => s + Math.abs(r.importo), 0)),
+          Uscite: Math.round(
+            righe.filter((r) => r.tipo === "Spesa" && contaNelTotale(r)).reduce((s, r) => s + Math.abs(r.importo), 0)
+          ),
         };
       }),
     [rows, mesiDisponibili]
   );
+
+  // --- feedback post-pagamento: ultima spesa sul foglio + totali del suo mese ---
+  // Indipendente dal mese selezionato: è "cosa ho appena fatto", non "cosa sto guardando".
+  const ultima = useMemo(() => {
+    const spese = rows.filter((r) => r.tipo === "Spesa" && contaNelTotale(r));
+    const t = spese[spese.length - 1];
+    if (!t) return null;
+    const delMese = spese.filter((r) => r.mese === t.mese);
+    return {
+      t,
+      totaleMese: delMese.reduce((s, r) => s + Math.abs(r.importo), 0),
+      totaleCategoria: delMese.filter((r) => r.categoria === t.categoria).reduce((s, r) => s + Math.abs(r.importo), 0),
+    };
+  }, [rows]);
 
   const giorniRestanti = isMeseCorrente ? giorniNelMese(oggi) - oggi.getDate() : 0;
 
@@ -240,6 +262,9 @@ export default function Dashboard() {
 
         {!loading && !error && (
           <>
+            {/* FEEDBACK ULTIMA TRANSAZIONE */}
+            <UltimaTransazione dati={ultima} oggi={oggi} />
+
             {/* SALDO */}
             <div
               style={{

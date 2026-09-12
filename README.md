@@ -24,6 +24,19 @@ src/
     Carte.jsx               CategoryBar, AndamentoCategoria, FisseVariabili, ReceiptTape
 ```
 
+## Feedback post-pagamento
+
+Dopo ogni pagamento NFC il comando rapido riceve da `apps-script/doPost.gs` un testo pronto per la notifica
+(importo · totale della categoria nel mese · totale del mese) e, se il merchant non è riconosciuto, l'elenco
+categorie per correggere la riga (`action: "ricategorizza"`). La dashboard mostra gli stessi tre numeri nella
+card **Ultima transazione** (`src/components/UltimaTransazione.jsx`).
+
+Regola condivisa: `ESCLUSE_DAL_TOTALE` (Carta di Credito, PAC, Trasferimento) deve essere identica in
+`src/config.js` e in `apps-script/doPost.gs`, altrimenti notifica e dashboard mostrano numeri diversi.
+
+Dopo ogni modifica a `doPost.gs`: incollarlo nel progetto Apps Script e fare **Distribuisci → Gestisci
+deployment → Nuova versione**, altrimenti l'URL continua a servire il codice vecchio.
+
 ## Dove modificare cosa
 
 - **Cambiare Sheet ID / categorie fisse / colori** → `src/config.js`

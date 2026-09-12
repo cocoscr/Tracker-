@@ -36,6 +36,17 @@ export function parseData(str) {
   return isNaN(d.getTime()) ? null : d;
 }
 
+// Date -> "set 2026", lo stesso formato della colonna I ("Mese") del foglio.
+// Serve come fallback: la colonna I è una formula che sulle righe appena
+// scritte dal comando rapido NFC può essere ancora vuota (la riempie il
+// trigger orario di manutenzione.gs). Senza fallback l'ultima transazione
+// sparirebbe dalla dashboard per un'ora.
+const MESI_BREVI = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
+export function meseDaData(d) {
+  if (!d || isNaN(d.getTime())) return "";
+  return `${MESI_BREVI[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 export const euro = (n) =>
   Math.abs(Number(n) || 0).toLocaleString("it-IT", {
     minimumFractionDigits: 2,
