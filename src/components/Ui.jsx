@@ -74,13 +74,31 @@ export function Tile({ icon: Icon, titolo, sub, onClick, accent }) {
   );
 }
 
-/* --- barra orizzontale con icona: categorie e conti --- */
-export function CategoryBar({ nome, valore, max, colore }) {
+/* --- barra orizzontale con icona: categorie e conti ---
+ * Con onClick diventa un pulsante (freccia a destra che ruota quando è aperta). */
+export function CategoryBar({ nome, valore, max, colore, onClick, aperta, conteggio }) {
   const Icon = iconFor(nome);
   const pct = max > 0 ? Math.round((valore / max) * 100) : 0;
   const tinta = colore || C.amber;
+  const Tag = onClick ? "button" : "div";
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0" }}>
+    <Tag
+      onClick={onClick}
+      aria-expanded={onClick ? !!aperta : undefined}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "9px 0",
+        width: "100%",
+        background: "transparent",
+        border: "none",
+        textAlign: "left",
+        cursor: onClick ? "pointer" : "default",
+        font: "inherit",
+        color: "inherit",
+      }}
+    >
       <div
         style={{
           width: 32,
@@ -89,23 +107,40 @@ export function CategoryBar({ nome, valore, max, colore }) {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: C.surfaceAlt,
-          color: tinta,
+          background: aperta ? tinta : C.surfaceAlt,
+          color: aperta ? C.bg : tinta,
           flexShrink: 0,
+          transition: "background 0.15s, color 0.15s",
         }}
       >
         <Icon size={15} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.87rem", marginBottom: 5 }}>
-          <span style={{ color: C.ink, fontFamily: fontBody, fontWeight: 500 }}>{nome}</span>
-          <span style={{ color: C.inkMuted, fontFamily: fontDisplay }}>€ {euro(valore)}</span>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: "0.87rem", marginBottom: 5 }}>
+          <span style={{ color: C.ink, fontFamily: fontBody, fontWeight: 500, minWidth: 0 }}>
+            {nome}
+            {conteggio > 0 && (
+              <span style={{ color: C.inkMuted, fontWeight: 400, fontSize: "0.74rem" }}> · {conteggio}</span>
+            )}
+          </span>
+          <span style={{ color: C.inkMuted, fontFamily: fontDisplay, flexShrink: 0 }}>€ {euro(valore)}</span>
         </div>
         <div style={{ height: 6, borderRadius: 999, overflow: "hidden", background: C.hairline }}>
           <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: tinta }} />
         </div>
       </div>
-    </div>
+      {onClick && (
+        <ChevronRight
+          size={16}
+          style={{
+            color: C.inkMuted,
+            flexShrink: 0,
+            transform: aperta ? "rotate(90deg)" : "none",
+            transition: "transform 0.15s",
+          }}
+        />
+      )}
+    </Tag>
   );
 }
 

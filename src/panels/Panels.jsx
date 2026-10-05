@@ -2,7 +2,7 @@
  *  PANNELLI — Categorie · Da pagare · Andamento
  * ------------------------------------------------------------------ */
 
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AreaChart,
   Area,
@@ -12,23 +12,86 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { C, fontBody, fontDisplay } from "../config.js";
+import { C, fontBody, fontDisplay, contaNelTotale } from "../config.js";
 import { euro } from "../utils.js";
 import BottomSheet from "../components/BottomSheet.jsx";
 import { CategoryBar, RicorrenteRow } from "../components/Ui.jsx";
+import MovimentoRow from "../components/MovimentoRow.jsx";
 
 const Vuoto = ({ children }) => (
   <div style={{ color: C.inkMuted, textAlign: "center", padding: "30px 0", fontSize: "0.88rem" }}>{children}</div>
 );
 
 /* ---------------------------- CATEGORIE ---------------------------- */
-export function PanelCategorie({ open, onClose, mese, speso, categorie, maxCat }) {
+// Tocca una categoria per vedere sotto le sue spese del mese (tocca di nuovo per chiudere).
+export function PanelCategorie({ open, onClose, mese, speso, categorie, maxCat, righeMese = [] }) {
+  const [aperta, setAperta] = useState(null);
+
+  // si riparte chiusi quando si cambia mese o si chiude il pannello
+  useEffect(() => setAperta(null), [mese, open]);
+
+  // spese del mese raggruppate per categoria, dalla più recente
+  const perCategoria = useMemo(() => {
+    const map = {};
+    righeMese
+      .filter((r) => r.tipo === "Spesa" && contaNelTotale(r))
+      .forEach((r) => {
+        (map[r.categoria] = map[r.categoria] || []).push(r);
+      });
+    Object.values(map).forEach((lista) =>
+      lista.sort((a, b) => (b.dataObj?.getTime() || 0) - (a.dataObj?.getTime() || 0))
+    );
+    return map;
+  }, [righeMese]);
+
   return (
     <BottomSheet open={open} title="Categorie" subtitle={`${mese || ""} · € ${euro(speso)} spesi`} onClose={onClose}>
       {categorie.length === 0 ? (
         <Vuoto>Nessuna spesa registrata in questo mese.</Vuoto>
       ) : (
-        categorie.map((c) => <CategoryBar key={c.nome} {...c} max={maxCat} />)
+        categorie.map((c) => {
+          const movimenti = perCategoria[c.nome] || [];
+          const isAperta = aperta === c.nome;
+          return (
+            <div key={c.nome}>
+              <CategoryBar
+                {...c}
+                max={maxCat}
+                conteggio={movimenti.length}
+                aperta={isAperta}
+                onClick={() => setAperta(isAperta ? null : c.nome)}
+              />
+              {isAperta && (
+                <div
+                  style={{
+                    margin: "2px 0 10px 44px",
+                    paddingLeft: 12,
+                    borderLeft: `2px solid ${C.hairline}`,
+                  }}
+                >
+                  {movimenti.map((m, i) => (
+                    <MovimentoRow key={`${m.data}-${m.descrizione}-${i}`} m={m} senzaCategoria />
+                  ))}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "9px 0 2px",
+                      color: C.inkMuted,
+                      fontSize: "0.74rem",
+                    }}
+                  >
+                    <span>
+                      {movimenti.length} {movimenti.length === 1 ? "movimento" : "movimenti"}
+                      {speso > 0 ? ` · ${Math.round((c.valore / speso) * 100)}% del mese` : ""}
+                    </span>
+                    <span style={{ fontFamily: fontDisplay }}>€ {euro(c.valore)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })
       )}
     </BottomSheet>
   );

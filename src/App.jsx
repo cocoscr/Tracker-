@@ -408,6 +408,7 @@ export default function Dashboard() {
         speso={speso}
         categorie={categorie}
         maxCat={maxCat}
+        righeMese={righeMese}
       />
 
       <PanelDaPagare

@@ -6,7 +6,7 @@ import React from "react";
 import { C, fontBody, fontDisplay, iconFor } from "../config.js";
 import { euro } from "../utils.js";
 
-export default function MovimentoRow({ m }) {
+export default function MovimentoRow({ m, senzaCategoria }) {
   const Icon = iconFor(m.categoria);
   const entrata = m.tipo === "Entrata";
   return (
@@ -49,8 +49,7 @@ export default function MovimentoRow({ m }) {
           {m.descrizione || m.categoria}
         </div>
         <div style={{ color: C.inkMuted, fontFamily: fontBody, fontSize: "0.72rem", marginTop: 2 }}>
-          {m.data} · {m.categoria}
-          {m.conto ? ` · ${m.conto}` : ""}
+          {[m.data, senzaCategoria ? null : m.categoria, m.conto].filter(Boolean).join(" · ")}
         </div>
       </div>
       <div
