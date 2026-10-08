@@ -57,8 +57,15 @@ export const C = {
   blue: "#7DF9FF",
 };
 
-export const fontDisplay = "'Space Mono', ui-monospace, 'SF Mono', Menlo, monospace";
-export const fontBody = "'Manrope', ui-sans-serif, system-ui, -apple-system, sans-serif";
+// Font di sistema Apple (San Francisco): già installato su iPhone e Mac, niente da scaricare.
+// Su Android/Windows ripiega su Helvetica/Arial. I numeri sono a larghezza fissa
+// (tabular-nums in index.css), così gli importi restano allineati.
+// Per provare Futura sui titoli e sui numeri grandi:
+//   export const fontDisplay = "Futura, 'Futura PT', 'Avenir Next', -apple-system, sans-serif";
+export const fontDisplay =
+  "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif";
+export const fontBody =
+  "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif";
 
 // ---- icone per categoria: aggiungi qui le nuove categorie ----
 const iconMap = {

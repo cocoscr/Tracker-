@@ -79,6 +79,7 @@ export function useSheetData() {
               categoria: (r["Categoria"] || "Altro").trim() || "Altro",
               attivo: !/^(no|false|0|n)$/i.test(String(r["Attivo"] ?? "si").trim()),
               note: (r["Note"] || "").trim(),
+              conto: (r["Conto"] || "").trim(),
             }))
             .filter((r) => r.descrizione && r.attivo && r.importo > 0),
         };

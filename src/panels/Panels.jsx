@@ -17,6 +17,7 @@ import { euro } from "../utils.js";
 import BottomSheet from "../components/BottomSheet.jsx";
 import { CategoryBar, RicorrenteRow } from "../components/Ui.jsx";
 import MovimentoRow from "../components/MovimentoRow.jsx";
+import PagaRicorrente from "../components/PagaRicorrente.jsx";
 
 const Vuoto = ({ children }) => (
   <div style={{ color: C.inkMuted, textAlign: "center", padding: "30px 0", fontSize: "0.88rem" }}>{children}</div>
@@ -106,7 +107,12 @@ export function PanelDaPagare({
   ricorrentiStato,
   daPagare,
   giorniRestanti,
+  onPagata,
 }) {
+  // spesa fissa aperta per segnarla pagata (tocca una riga non ancora pagata)
+  const [aperta, setAperta] = useState(null);
+  useEffect(() => setAperta(null), [open]);
+
   return (
     <BottomSheet
       open={open}
@@ -145,9 +151,35 @@ export function PanelDaPagare({
         <Vuoto>Nessuna spesa ricorrente attiva.</Vuoto>
       ) : (
         <>
-          {ricorrentiStato.map((r, i) => (
-            <RicorrenteRow key={`${r.descrizione}-${i}`} r={r} />
-          ))}
+          {ricorrentiStato.map((r, i) => {
+            const key = `${r.descrizione}-${i}`;
+            const pagabile = r.stato !== "pagata" && !!onPagata;
+            const isAperta = aperta === key;
+            return (
+              <div key={key}>
+                <RicorrenteRow
+                  r={r}
+                  aperta={isAperta}
+                  onClick={pagabile ? () => setAperta(isAperta ? null : key) : undefined}
+                />
+                {isAperta && (
+                  <PagaRicorrente
+                    r={r}
+                    onAnnulla={() => setAperta(null)}
+                    onPagata={(pagata) => {
+                      setAperta(null);
+                      onPagata(pagata);
+                    }}
+                  />
+                )}
+              </div>
+            );
+          })}
+          {onPagata && ricorrentiStato.some((r) => r.stato !== "pagata") && (
+            <div style={{ color: C.inkMuted, fontSize: "0.72rem", marginTop: 10, lineHeight: 1.5 }}>
+              Tocca una spesa per segnarla pagata: la riga viene scritta sul foglio con la data di oggi.
+            </div>
+          )}
           <div
             style={{
               display: "flex",

@@ -145,7 +145,7 @@ export function CategoryBar({ nome, valore, max, colore, onClick, aperta, conteg
 }
 
 /* --- riga di una spesa ricorrente --- */
-export function RicorrenteRow({ r }) {
+export function RicorrenteRow({ r, onClick, aperta }) {
   const Icon = iconFor(r.categoria);
   const stato =
     r.stato === "pagata"
@@ -153,14 +153,24 @@ export function RicorrenteRow({ r }) {
       : r.stato === "ritardo"
       ? { label: "In ritardo", color: C.coral, Ico: AlertCircle }
       : { label: `Il ${r.giorno}`, color: C.amber, Ico: Clock };
+  const Tag = onClick ? "button" : "div";
   return (
-    <div
+    <Tag
+      onClick={onClick}
+      aria-expanded={onClick ? !!aperta : undefined}
       style={{
         display: "flex",
         alignItems: "center",
         gap: 12,
         padding: "11px 0",
-        borderBottom: `1px solid ${C.hairline}`,
+        width: "100%",
+        background: "transparent",
+        border: "none",
+        borderBottom: aperta ? "1px solid transparent" : `1px solid ${C.hairline}`,
+        textAlign: "left",
+        font: "inherit",
+        color: "inherit",
+        cursor: onClick ? "pointer" : "default",
         opacity: r.stato === "pagata" ? 0.5 : 1,
       }}
     >
@@ -210,9 +220,20 @@ export function RicorrenteRow({ r }) {
         </div>
       </div>
       <div style={{ color: C.ink, fontFamily: fontDisplay, fontWeight: 700, fontSize: "0.88rem", whiteSpace: "nowrap" }}>
-        € {euro(r.importo)}
+        {r.importo > 0 ? `€ ${euro(r.importo)}` : "—"}
       </div>
-    </div>
+      {onClick && (
+        <ChevronRight
+          size={16}
+          style={{
+            color: C.inkMuted,
+            flexShrink: 0,
+            transform: aperta ? "rotate(90deg)" : "none",
+            transition: "transform 0.15s",
+          }}
+        />
+      )}
+    </Tag>
   );
 }
 

@@ -12,6 +12,8 @@ html {
 }
 
 body {
+  font-variant-numeric: tabular-nums; /* cifre tutte larghe uguali: importi allineati */
+  -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
 }

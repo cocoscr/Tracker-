@@ -20,7 +20,7 @@ import {
   ReceiptText,
 } from "lucide-react";
 import { C, fontBody, fontDisplay, contaNelTotale } from "./config.js";
-import { euro, norm, giorniNelMese } from "./utils.js";
+import { euro, norm, giorniNelMese, meseDaData } from "./utils.js";
 import { useSheetData } from "./useSheetData.js";
 import { MiniStat, Tile } from "./components/Ui.jsx";
 import UltimaTransazione from "./components/UltimaTransazione.jsx";
@@ -29,7 +29,33 @@ import PanelMovimenti from "./panels/PanelMovimenti.jsx";
 import PanelPatrimonio from "./panels/PanelPatrimonio.jsx";
 
 export default function Dashboard() {
-  const { loading, error, rows, ricorrenti, ricorrentiOk } = useSheetData();
+  const { loading, error, rows: righeFoglio, ricorrenti, ricorrentiOk } = useSheetData();
+
+  // Righe scritte dall'app in questa sessione (es. spesa fissa segnata pagata):
+  // si vedono subito, senza aspettare che il foglio venga riletto.
+  const [righeLocali, setRigheLocali] = useState([]);
+  const rows = useMemo(
+    () => (righeLocali.length ? [...righeFoglio, ...righeLocali] : righeFoglio),
+    [righeFoglio, righeLocali]
+  );
+  const aggiungiPagata = useCallback((r) => {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    setRigheLocali((prev) => [
+      ...prev,
+      {
+        data: r.data || `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`,
+        dataObj: d,
+        tipo: "Spesa",
+        descrizione: r.descrizione,
+        categoria: r.categoria || "Altro",
+        metodo: "-",
+        conto: r.conto || "",
+        importo: -Math.abs(r.importo),
+        mese: meseDaData(d),
+      },
+    ]);
+  }, []);
   const [panel, setPanel] = useState(null);
   const closePanel = useCallback(() => setPanel(null), []);
 
@@ -143,8 +169,7 @@ export default function Dashboard() {
         paddingBottom: "env(safe-area-inset-bottom)",
       }}
     >
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Manrope:wght@400;500;600;700;800&display=swap');
-        @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+      <style>{`@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @keyframes spin { to { transform: rotate(360deg); } }
         * { -webkit-tap-highlight-color: transparent; }
         button { font: inherit; }`}</style>
@@ -419,6 +444,7 @@ export default function Dashboard() {
         ricorrentiStato={ricorrentiStato}
         daPagare={daPagare}
         giorniRestanti={giorniRestanti}
+        onPagata={aggiungiPagata}
       />
 
       <PanelTrend open={panel === "trend"} onClose={closePanel} trend={trend} />

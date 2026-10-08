@@ -80,6 +80,7 @@ function doPost(e) {
     const data = JSON.parse(e.postData.contents);
     Logger.log("Payload: " + e.postData.contents);
     if (data.action === "ricategorizza") return ricategorizza(data);
+    if (data.action === "ricorrente") return pagaRicorrente(data);
     return nuovaTransazione(data);
   } catch (err) {
     Logger.log("ERRORE: " + err);
@@ -136,6 +137,52 @@ function nuovaTransazione(data) {
     totaleCategoria: r.totaleCategoria,
     totaleMese: r.totaleMese,
     testo: componiTesto(importo, categoria, r, riconosciuta)
+  });
+}
+
+/* ================ SPESA FISSA PAGATA (dalla webapp) ================ */
+/*  La webapp (pannello "Da pagare") manda:
+ *    { action: "ricorrente", descrizione, importo, categoria, conto }
+ *  e qui si scrive la riga in Transazioni con la data di oggi.
+ *  Se nello stesso mese c'è già una spesa con quella descrizione risponde
+ *  "duplicato" senza scrivere (a meno che arrivi forza: 1).
+ */
+function pagaRicorrente(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_TX);
+  const descrizione = String(data.descrizione || "").trim();
+  const importo = Math.abs(parseImporto(data.importo));
+  const categoria = String(data.categoria || "").trim() || CAT_FALLBACK;
+  const conto = String(data.conto || "").trim();
+
+  if (!descrizione) return json({ status: "error", testo: "Descrizione mancante." });
+  if (!(importo > 0)) return json({ status: "error", testo: "Importo non valido: " + data.importo });
+
+  const oggi = new Date();
+  if (!data.forza) {
+    const key = descrizione.toLowerCase();
+    const dati = sheet.getRange(2, 1, Math.max(sheet.getLastRow() - 1, 1), 4).getValues();
+    for (let i = dati.length - 1; i >= 0; i--) {
+      const d = parseData(dati[i][0]);
+      if (!d || d.getFullYear() !== oggi.getFullYear() || d.getMonth() !== oggi.getMonth()) continue;
+      if (String(dati[i][2]).trim() !== "Spesa") continue;
+      const desc = String(dati[i][3]).trim().toLowerCase();
+      if (desc && (desc.indexOf(key) >= 0 || key.indexOf(desc) >= 0)) {
+        return json({ status: "duplicato", riga: i + 2, testo: descrizione + " risulta già registrata questo mese (riga " + (i + 2) + ")." });
+      }
+    }
+  }
+
+  const dataStr = Utilities.formatDate(oggi, Session.getScriptTimeZone(), "dd/MM/yyyy");
+  sheet.appendRow([dataStr, importo, "Spesa", descrizione, categoria, "-", conto]);
+  return json({
+    status: "ok",
+    riga: sheet.getLastRow(),
+    data: dataStr,
+    descrizione: descrizione,
+    importo: importo,
+    categoria: categoria,
+    conto: conto,
+    testo: descrizione + ": " + importo.toFixed(2).replace(".", ",") + " € segnata come pagata"
   });
 }
 

@@ -24,6 +24,7 @@ di solito basta per sapere QUALE file toccare. Non leggere tutto il repo.
 | Categorizzazione merchant, mappa carte, testo notifica | `apps-script/doPost.gs` (REGOLE, MAPPA_CARTE, componiTesto) |
 | Liquidità/investimenti, tab Patrimonio, storico giornaliero | `apps-script/patrimonio.gs` (saldi SOLO in tab Conti; Patrimonio è calcolato) |
 | PAC automatici (righe Transazioni + quote Posizioni) | `apps-script/pac.gs` (PAC_PIANI: importo, giorno, ticker) |
+| Spesa fissa "segna pagata" dall'app | `src/components/PagaRicorrente.jsx` + `src/scriptApi.js` → `doPost` action `ricorrente` (pagaRicorrente) |
 
 ## Regole da non rompere
 - `ESCLUSE_DAL_TOTALE` deve essere IDENTICO in `src/config.js` e `apps-script/doPost.gs`.
@@ -38,12 +39,11 @@ di solito basta per sapere QUALE file toccare. Non leggere tutto il repo.
 - `GOOGLEFINANCE("CSTNL")` restituisce il prezzo in USD: va convertito in EUR (fatto in `sistemaPosizioni`).
 
 ## Note di stato (max 10 righe, aggiornare a fine sessione)
-- 2026-09-12: ultimo commit "Feedback post-transazione: card Ultima transazione + doPost v2". App.jsx già spezzato in moduli.
-- 2026-10-03: RISOLTO importo vuoto dal comando NFC: Trade Republic passa l'importo a Wallet in ritardo, fix = passaggio "Attendi" nel comando rapido prima del POST.
-- 2026-10-03: doPost v2 incollato in Apps Script e ridistribuito (test ok). Comando rapido parte A (notifica) montata: manca il test con un pagamento reale. Parte B (correzione categoria) da fare.
-- 2026-10-05: script v3 (conversione valute KWD→EUR, tab Cambi/Log) PRONTO ma rimandato al 3 novembre (promemoria programmato): file `apps-script/doPost_v3_valute.gs` (in produzione resta `doPost.gs` v2; al deploy rinominare v3 → doPost.gs). Le righe in KWD di ottobre andranno corrette con `correggiRigheValuta()` usando l'estratto Revolut/TR.
-- 2026-10-05: `patrimonio.gs` installato e verificato (liquidità 6.453 · investito 1.798). Scritto `pac.gs` (S&P 500 100 € il 2 e il 16, NVIDIA 100 € il 2 = 300 €/mese): DA INCOLLARE + `installaPac()`. Poi: pannello Patrimonio nella webapp (non ancora toccato).
-- 2026-10-05: Categorie cliccabili (tocchi una categoria → elenco spese del mese sotto, a fisarmonica): `Panels.jsx` PanelCategorie + `CategoryBar` (Ui.jsx) con onClick + `MovimentoRow senzaCategoria`. Build ok, NON ancora pushato.
-- Da verificare: righe Ricorrenti "Bollette" (senza importo/giorno) e "Spotify" (senza giorno).
-- Idea non iniziata: analisi investimenti/risparmi.
+- 2026-10-03: importo vuoto NFC risolto con "Attendi" nel comando rapido. Comando rapido parte B (correzione categoria) da fare.
+- 2026-10-05: `doPost_v3_valute.gs` (KWD→EUR) pronto, rimandato al 3/11 (promemoria). In produzione resta `doPost.gs`; al deploy v3 → doPost.gs (ha già anche il ramo `ricorrente`).
+- 2026-10-05: `patrimonio.gs` e `pac.gs` installati e funzionanti (liquidità 6.453 · investito 1.798; PAC S&P 2 e 16 + NVIDIA 2 = 300 €/mese). Cometa: valore da inserire in Conti più avanti.
+- 2026-10-05: pushato e99935a "Categorie cliccabili…", ma il deploy Pages è FALLITO (15 min, ✗) → sito ancora vecchio. Da rilanciare / verificare con il prossimo push.
+- 2026-10-08: pronti NON pushati: font Apple (SF, tabular-nums) + "segna pagata" spese fisse (URL Apps Script solo nel localStorage del telefono, mai nel codice). `doPost.gs` col ramo `ricorrente` da incollare + Nuova versione.
+- Da fare poi: pannello Patrimonio nella webapp (liquidità/investito/posizioni), controllo auto-aggiornamento versione all'apertura, punto migliaia in `euro()`, segno meno su saldo negativo, grafico Andamento vuoto (animazione Recharts).
+- Da verificare: righe Ricorrenti "Bollette" (senza importo/giorno).
 - Storico completo: `~/Claude/Secondo Cervello/Archivio/` (leggere solo se serve).
