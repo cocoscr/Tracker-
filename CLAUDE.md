@@ -27,6 +27,7 @@ di solito basta per sapere QUALE file toccare. Non leggere tutto il repo.
 | Spesa fissa "Paga" dall'app (un tocco + Annulla) | `src/panels/Panels.jsx` (PanelDaPagare) + `src/components/PagaRicorrente.jsx` (importo diverso) + `src/scriptApi.js` → `doPost` action `ricorrente` / `annullaRicorrente`. URL script solo nel localStorage del telefono |
 
 ## Regole da non rompere
+- Il comando rapido NFC deve mandare il campo `chiave` (= Proprietà script CHIAVE_NFC) in entrambi i POST, altrimenti lo script rifiuta la transazione.
 - `ESCLUSE_DAL_TOTALE` deve essere IDENTICO in `src/config.js` e `apps-script/doPost.gs`.
 - Dopo ogni modifica a un `.gs`: incollarlo in Apps Script (prima ⌘A + Backspace, altrimenti finisce dentro `myFunction`) e fare Distribuisci → Gestisci deployment → Nuova versione.
 - Per verificare che compili usa `npm run build` (dopo `npm install`), invece di rileggere tutto il codice.
@@ -42,7 +43,7 @@ di solito basta per sapere QUALE file toccare. Non leggere tutto il repo.
 - 2026-10-03: importo vuoto NFC risolto con "Attendi" nel comando rapido. Comando rapido parte B (correzione categoria) da fare.
 - 2026-10-05: `doPost_v3_valute.gs` (KWD→EUR) pronto, rimandato al 3/11 (promemoria). In produzione resta `doPost.gs`; al deploy v3 → doPost.gs (ha già anche il ramo `ricorrente`).
 - 2026-10-05: `patrimonio.gs` e `pac.gs` installati e funzionanti (liquidità 6.453 · investito 1.798; PAC S&P 2 e 16 + NVIDIA 2 = 300 €/mese). Cometa: valore da inserire in Conti più avanti.
-- 2026-10-08: pushato daa2b3f (categorie cliccabili, font SF, segna pagata) → deploy ok, visto su iPhone. Poi: pulsante "Paga" a un tocco + "Annulla" (doPost action `annullaRicorrente`) — NON ancora pushato, doPost da reincollare + Nuova versione.
+- 2026-10-08: pushati daa2b3f + e532b0e (Paga a un tocco). Poi: SCRIPT_URL in `config.js` (pubblico) + sicurezza in doPost: dall'app solo spese del tab Ricorrenti (importo ≤ 2×), NFC/ricategorizza richiedono `chiave` = Proprietà script CHIAVE_NFC (`impostaChiaveNFC()`). Ordine: incolla doPost → impostaChiaveNFC → chiave nel comando rapido (2 POST) → Nuova versione → push.
 - Da fare poi: pannello Patrimonio nella webapp (liquidità/investito/posizioni), controllo auto-aggiornamento versione all'apertura, punto migliaia in `euro()`, segno meno su saldo negativo, grafico Andamento vuoto (animazione Recharts).
 - Da verificare: righe Ricorrenti "Bollette" (senza importo/giorno).
 - Storico completo: `~/Claude/Secondo Cervello/Archivio/` (leggere solo se serve).

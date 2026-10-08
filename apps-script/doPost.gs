@@ -79,9 +79,14 @@ function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     Logger.log("Payload: " + e.postData.contents);
-    if (data.action === "ricategorizza") return ricategorizza(data);
+    // dalla dashboard: niente chiave, ma solo spese del tab Ricorrenti
     if (data.action === "ricorrente") return pagaRicorrente(data);
     if (data.action === "annullaRicorrente") return annullaRicorrente(data);
+    // dal comando NFC: serve la chiave (vedi SICUREZZA)
+    if (!chiaveValida(data)) {
+      return json({ status: "error", testo: "Chiave mancante o sbagliata: transazione NON registrata." });
+    }
+    if (data.action === "ricategorizza") return ricategorizza(data);
     return nuovaTransazione(data);
   } catch (err) {
     Logger.log("ERRORE: " + err);
@@ -141,6 +146,53 @@ function nuovaTransazione(data) {
   });
 }
 
+/* ================ SICUREZZA ================ */
+/*  L'indirizzo di questo script è pubblico (sta nel codice della dashboard).
+ *  - Le transazioni del comando NFC (e la ricategorizzazione) richiedono la
+ *    chiave salvata nelle Proprietà script come CHIAVE_NFC. Finché la chiave
+ *    non è impostata il controllo è spento (compatibilità).
+ *  - Le richieste della dashboard ("ricorrente"/"annullaRicorrente") non hanno
+ *    chiave ma possono toccare SOLO le spese elencate nel tab Ricorrenti.
+ *  Per creare la chiave: esegui impostaChiaveNFC() una volta e leggi il Log.
+ */
+function chiaveValida(data) {
+  const k = PropertiesService.getScriptProperties().getProperty("CHIAVE_NFC");
+  if (!k) return true;
+  return String(data.chiave || "").trim() === k;
+}
+
+function impostaChiaveNFC() {
+  const alfabeto = "abcdefghjkmnpqrstuvwxyz23456789";
+  let k = "";
+  for (let i = 0; i < 10; i++) k += alfabeto.charAt(Math.floor(Math.random() * alfabeto.length));
+  PropertiesService.getScriptProperties().setProperty("CHIAVE_NFC", k);
+  Logger.log("CHIAVE_NFC = " + k + "   ← copiala nel comando rapido (campo \"chiave\")");
+  return k;
+}
+
+// Spesa del tab Ricorrenti con questa descrizione (attiva), oppure null.
+function trovaRicorrente(descrizione) {
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Ricorrenti");
+  if (!sh || sh.getLastRow() < 2) return null;
+  const dati = sh.getDataRange().getValues();
+  const H = dati[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  const c = function (n) { return H.indexOf(n); };
+  const key = String(descrizione || "").trim().toLowerCase();
+  for (let i = 1; i < dati.length; i++) {
+    const r = dati[i];
+    if (String(r[c("descrizione")]).trim().toLowerCase() !== key) continue;
+    const attivo = c("attivo") < 0 ? "si" : String(r[c("attivo")]).trim().toLowerCase();
+    if (/^(no|false|0|n)$/.test(attivo)) return null;
+    return {
+      descrizione: String(r[c("descrizione")]).trim(),
+      importo: Math.abs(parseImportoCella(r[c("importo")])) || 0,
+      categoria: c("categoria") >= 0 ? String(r[c("categoria")]).trim() : "",
+      conto: c("conto") >= 0 ? String(r[c("conto")]).trim() : ""
+    };
+  }
+  return null;
+}
+
 /* ================ SPESA FISSA PAGATA (dalla webapp) ================ */
 /*  La webapp (pannello "Da pagare") manda:
  *    { action: "ricorrente", descrizione, importo, categoria, conto }
@@ -150,13 +202,18 @@ function nuovaTransazione(data) {
  */
 function pagaRicorrente(data) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_TX);
-  const descrizione = String(data.descrizione || "").trim();
+  const ric = trovaRicorrente(data.descrizione);
+  if (!ric) return json({ status: "error", testo: "\"" + data.descrizione + "\" non è nel tab Ricorrenti." });
+  const descrizione = ric.descrizione;
   const importo = Math.abs(parseImporto(data.importo));
-  const categoria = String(data.categoria || "").trim() || CAT_FALLBACK;
-  const conto = String(data.conto || "").trim();
+  const categoria = ric.categoria || CAT_FALLBACK;
+  const conto = ric.conto;
 
-  if (!descrizione) return json({ status: "error", testo: "Descrizione mancante." });
-  if (!(importo > 0)) return json({ status: "error", testo: "Importo non valido: " + data.importo });
+  // importo plausibile: fino al doppio di quello previsto (o 500 € se non c'è)
+  const tetto = ric.importo > 0 ? ric.importo * 2 : 500;
+  if (!(importo > 0) || importo > tetto) {
+    return json({ status: "error", testo: "Importo non valido per " + descrizione + ": " + data.importo });
+  }
 
   const oggi = new Date();
   if (!data.forza) {
@@ -195,7 +252,9 @@ function pagaRicorrente(data) {
 function annullaRicorrente(data) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_TX);
   const riga = parseInt(data.riga, 10);
-  const descrizione = String(data.descrizione || "").trim();
+  const ric = trovaRicorrente(data.descrizione);
+  if (!ric) return json({ status: "error", testo: "Si possono annullare solo spese del tab Ricorrenti." });
+  const descrizione = ric.descrizione;
   if (!riga || riga < 2 || riga > sheet.getLastRow()) {
     return json({ status: "error", testo: "Riga non valida: " + data.riga });
   }

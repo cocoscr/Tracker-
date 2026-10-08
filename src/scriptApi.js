@@ -1,20 +1,19 @@
 /* ------------------------------------------------------------------ *
  *  SCRITTURA SUL FOGLIO — tramite lo stesso Apps Script del comando NFC
- *
- *  L'indirizzo dello script NON sta nel codice (il repo è pubblico):
- *  si incolla una volta nell'app e resta salvato solo su quel telefono
- *  (localStorage). Chi legge il codice su GitHub non sa dove scrivere.
- *  Nota: l'icona sulla schermata Home e Safari hanno memorie separate,
- *  quindi va incollato in tutti e due se li usi entrambi.
+ *  L'indirizzo è SCRIPT_URL in config.js. Un indirizzo salvato sul
+ *  telefono (localStorage) ha la precedenza: serve solo se un giorno
+ *  si cambia deployment e si vuole provare senza ripubblicare l'app.
  * ------------------------------------------------------------------ */
+
+import { SCRIPT_URL } from "./config.js";
 
 const CHIAVE = "tracker.scriptUrl";
 
 export function leggiUrlScript() {
   try {
-    return localStorage.getItem(CHIAVE) || "";
+    return localStorage.getItem(CHIAVE) || SCRIPT_URL || "";
   } catch {
-    return "";
+    return SCRIPT_URL || "";
   }
 }
 

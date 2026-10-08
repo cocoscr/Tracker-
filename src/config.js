@@ -18,6 +18,13 @@ export const SHEET_PATRIMONIO = "Patrimonio";        // opzionale
 export const SHEET_POSIZIONI = "Posizioni";          // opzionale
 export const SHEET_STORICO = "Storico Patrimonio";   // opzionale
 
+// Apps Script che scrive sul foglio (stesso del comando NFC).
+// È pubblico (il repo è pubblico): dall'app lo script accetta SOLO le spese del
+// tab Ricorrenti; le transazioni del comando NFC richiedono una chiave segreta
+// che sta nelle proprietà del progetto Apps Script, non qui.
+export const SCRIPT_URL =
+  "https://script.google.com/macros/s/AKfycbyQ9NCoqEPXVU6HXuRtpDjWijy-K-ddsXxV6s-k8BXAjG_a2vdKFGk31OODDhBHYlBtQg/exec";
+
 export const csvUrl = (nome) =>
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(nome)}`;
 
