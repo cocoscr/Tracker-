@@ -18,6 +18,7 @@ import BottomSheet from "../components/BottomSheet.jsx";
 import { CategoryBar, RicorrenteRow } from "../components/Ui.jsx";
 import MovimentoRow from "../components/MovimentoRow.jsx";
 import PagaRicorrente from "../components/PagaRicorrente.jsx";
+import { inviaAlFoglio, leggiUrlScript } from "../scriptApi.js";
 
 const Vuoto = ({ children }) => (
   <div style={{ color: C.inkMuted, textAlign: "center", padding: "30px 0", fontSize: "0.88rem" }}>{children}</div>
@@ -108,12 +109,73 @@ export function PanelDaPagare({
   daPagare,
   giorniRestanti,
   onPagata,
+  onAnnullata,
 }) {
-  // spesa fissa aperta per segnarla pagata (tocca una riga non ancora pagata)
+  // spesa fissa aperta per cambiare l'importo (tocco sulla riga)
   const [aperta, setAperta] = useState(null);
+  // spesa in invio (tocco su "Paga") e avviso in basso con "Annulla"
+  const [invio, setInvio] = useState(null);
+  const [avviso, setAvviso] = useState(null); // { testo, tipo: ok|errore, pagata? }
   useEffect(() => setAperta(null), [open]);
 
+  // l'avviso sparisce da solo dopo qualche secondo
+  useEffect(() => {
+    if (!avviso || avviso.inAnnullo) return;
+    const t = setTimeout(() => setAvviso(null), avviso.tipo === "ok" ? 6000 : 5000);
+    return () => clearTimeout(t);
+  }, [avviso]);
+
+  // Un tocco su "Paga": scrive subito la riga con l'importo del tab Ricorrenti.
+  const pagaSubito = async (r, key) => {
+    if (!leggiUrlScript()) {
+      setAperta(key); // primo uso: il riquadro chiede l'indirizzo dello script
+      return;
+    }
+    setInvio(key);
+    setAvviso(null);
+    try {
+      const esito = await inviaAlFoglio({
+        action: "ricorrente",
+        descrizione: r.descrizione,
+        importo: r.importo,
+        categoria: r.categoria,
+        conto: r.conto || "",
+      });
+      if (esito.status === "ok") {
+        const pagata = { ...r, importo: esito.importo ?? r.importo, data: esito.data, riga: esito.riga };
+        onPagata(pagata);
+        setAvviso({ tipo: "ok", testo: `${r.descrizione} · € ${euro(pagata.importo)} registrata`, pagata });
+      } else if (esito.status === "duplicato") {
+        setAvviso({ tipo: "errore", testo: `${r.descrizione} è già registrata questo mese.` });
+      } else {
+        setAvviso({ tipo: "errore", testo: esito.testo || "Errore dallo script." });
+      }
+    } catch (err) {
+      setAvviso({ tipo: "errore", testo: err.message || String(err) });
+    } finally {
+      setInvio(null);
+    }
+  };
+
+  const annulla = async () => {
+    const p = avviso?.pagata;
+    if (!p) return;
+    setAvviso({ ...avviso, inAnnullo: true });
+    try {
+      const esito = await inviaAlFoglio({ action: "annullaRicorrente", riga: p.riga, descrizione: p.descrizione });
+      if (esito.status === "ok") {
+        onAnnullata && onAnnullata(p.riga);
+        setAvviso({ tipo: "info", testo: `${p.descrizione}: annullata` });
+      } else {
+        setAvviso({ tipo: "errore", testo: esito.testo || "Non sono riuscito ad annullare." });
+      }
+    } catch (err) {
+      setAvviso({ tipo: "errore", testo: err.message || String(err) });
+    }
+  };
+
   return (
+    <>
     <BottomSheet
       open={open}
       title="Da pagare"
@@ -161,6 +223,8 @@ export function PanelDaPagare({
                   r={r}
                   aperta={isAperta}
                   onClick={pagabile ? () => setAperta(isAperta ? null : key) : undefined}
+                  onPaga={pagabile && !isAperta ? () => pagaSubito(r, key) : undefined}
+                  invio={invio === key}
                 />
                 {isAperta && (
                   <PagaRicorrente
@@ -169,6 +233,7 @@ export function PanelDaPagare({
                     onPagata={(pagata) => {
                       setAperta(null);
                       onPagata(pagata);
+                      setAvviso({ tipo: "ok", testo: `${pagata.descrizione} · € ${euro(pagata.importo)} registrata`, pagata });
                     }}
                   />
                 )}
@@ -177,7 +242,7 @@ export function PanelDaPagare({
           })}
           {onPagata && ricorrentiStato.some((r) => r.stato !== "pagata") && (
             <div style={{ color: C.inkMuted, fontSize: "0.72rem", marginTop: 10, lineHeight: 1.5 }}>
-              Tocca una spesa per segnarla pagata: la riga viene scritta sul foglio con la data di oggi.
+              “Paga” registra la spesa sul foglio con la data di oggi. Tocca la riga se l'importo è diverso.
             </div>
           )}
           <div
@@ -197,6 +262,53 @@ export function PanelDaPagare({
         </>
       )}
     </BottomSheet>
+    {avviso && (
+      <div
+        role="status"
+        style={{
+          position: "fixed",
+          left: "50%",
+          transform: "translateX(-50%)",
+          bottom: "calc(20px + env(safe-area-inset-bottom))",
+          zIndex: 1000,
+          width: "min(560px, calc(100% - 32px))",
+          boxSizing: "border-box",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "12px 14px",
+          borderRadius: 16,
+          background: C.surfaceAlt,
+          border: `1px solid ${avviso.tipo === "errore" ? C.coral : C.hairline}`,
+          boxShadow: "0 10px 30px rgba(0,0,0,0.45)",
+          fontFamily: fontBody,
+        }}
+      >
+        <span style={{ flex: 1, minWidth: 0, color: avviso.tipo === "errore" ? C.coral : C.ink, fontSize: "0.84rem" }}>
+          {avviso.testo}
+        </span>
+        {avviso.pagata && (
+          <button
+            onClick={annulla}
+            disabled={avviso.inAnnullo}
+            style={{
+              background: "none",
+              border: "none",
+              color: C.amber,
+              fontFamily: fontBody,
+              fontWeight: 700,
+              fontSize: "0.84rem",
+              cursor: "pointer",
+              flexShrink: 0,
+              opacity: avviso.inAnnullo ? 0.5 : 1,
+            }}
+          >
+            {avviso.inAnnullo ? "Annullo…" : "Annulla"}
+          </button>
+        )}
+      </div>
+    )}
+    </>
   );
 }
 

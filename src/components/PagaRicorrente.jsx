@@ -117,7 +117,7 @@ export default function PagaRicorrente({ r, onPagata, onAnnulla }) {
         forza: forza ? 1 : 0,
       });
       if (esito.status === "ok") {
-        onPagata({ ...r, importo: esito.importo ?? valore, data: esito.data });
+        onPagata({ ...r, importo: esito.importo ?? valore, data: esito.data, riga: esito.riga });
       } else if (esito.status === "duplicato") {
         setStato({ fase: "duplicato", msg: esito.testo });
       } else {

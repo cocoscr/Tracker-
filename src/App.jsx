@@ -53,8 +53,12 @@ export default function Dashboard() {
         conto: r.conto || "",
         importo: -Math.abs(r.importo),
         mese: meseDaData(d),
+        rigaFoglio: r.riga,
       },
     ]);
+  }, []);
+  const rimuoviPagata = useCallback((riga) => {
+    setRigheLocali((prev) => prev.filter((x) => x.rigaFoglio !== riga));
   }, []);
   const [panel, setPanel] = useState(null);
   const closePanel = useCallback(() => setPanel(null), []);
@@ -445,6 +449,7 @@ export default function Dashboard() {
         daPagare={daPagare}
         giorniRestanti={giorniRestanti}
         onPagata={aggiungiPagata}
+        onAnnullata={rimuoviPagata}
       />
 
       <PanelTrend open={panel === "trend"} onClose={closePanel} trend={trend} />

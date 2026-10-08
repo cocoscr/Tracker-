@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------ */
 
 import React from "react";
-import { ChevronRight, Check, Clock, AlertCircle, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { ChevronRight, Check, Clock, AlertCircle, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react";
 import { C, fontBody, fontDisplay, iconFor } from "../config.js";
 import { euro } from "../utils.js";
 
@@ -144,8 +144,11 @@ export function CategoryBar({ nome, valore, max, colore, onClick, aperta, conteg
   );
 }
 
-/* --- riga di una spesa ricorrente --- */
-export function RicorrenteRow({ r, onClick, aperta }) {
+/* --- riga di una spesa ricorrente ---
+ * onPaga  → pulsante "Paga" a destra: un tocco e la spesa viene registrata
+ * onClick → tocco sul resto della riga: apre il riquadro per cambiare l'importo
+ * invio   → mostra la rotellina sul pulsante mentre scrive sul foglio */
+export function RicorrenteRow({ r, onClick, aperta, onPaga, invio }) {
   const Icon = iconFor(r.categoria);
   const stato =
     r.stato === "pagata"
@@ -153,87 +156,113 @@ export function RicorrenteRow({ r, onClick, aperta }) {
       : r.stato === "ritardo"
       ? { label: "In ritardo", color: C.coral, Ico: AlertCircle }
       : { label: `Il ${r.giorno}`, color: C.amber, Ico: Clock };
-  const Tag = onClick ? "button" : "div";
+  const Corpo = onClick ? "button" : "div";
   return (
-    <Tag
-      onClick={onClick}
-      aria-expanded={onClick ? !!aperta : undefined}
+    <div
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 12,
-        padding: "11px 0",
-        width: "100%",
-        background: "transparent",
-        border: "none",
+        gap: 10,
         borderBottom: aperta ? "1px solid transparent" : `1px solid ${C.hairline}`,
-        textAlign: "left",
-        font: "inherit",
-        color: "inherit",
-        cursor: onClick ? "pointer" : "default",
         opacity: r.stato === "pagata" ? 0.5 : 1,
       }}
     >
-      <div
+      <Corpo
+        onClick={onClick}
+        aria-expanded={onClick ? !!aperta : undefined}
         style={{
-          width: 32,
-          height: 32,
-          borderRadius: 10,
+          flex: 1,
+          minWidth: 0,
           display: "flex",
           alignItems: "center",
-          justifyContent: "center",
-          background: C.surfaceAlt,
-          color: stato.color,
-          flexShrink: 0,
+          gap: 12,
+          padding: "11px 0",
+          background: "transparent",
+          border: "none",
+          textAlign: "left",
+          font: "inherit",
+          color: "inherit",
+          cursor: onClick ? "pointer" : "default",
         }}
       >
-        <Icon size={15} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
-            color: C.ink,
-            fontFamily: fontBody,
-            fontWeight: 600,
-            fontSize: "0.88rem",
-            textDecoration: r.stato === "pagata" ? "line-through" : "none",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {r.descrizione}
-        </div>
-        <div
-          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 10,
             display: "flex",
             alignItems: "center",
-            gap: 4,
+            justifyContent: "center",
+            background: C.surfaceAlt,
             color: stato.color,
-            fontFamily: fontBody,
-            fontSize: "0.72rem",
-            marginTop: 2,
+            flexShrink: 0,
           }}
         >
-          <stato.Ico size={11} />
-          {stato.label} · {r.categoria}
+          <Icon size={15} />
         </div>
-      </div>
-      <div style={{ color: C.ink, fontFamily: fontDisplay, fontWeight: 700, fontSize: "0.88rem", whiteSpace: "nowrap" }}>
-        {r.importo > 0 ? `€ ${euro(r.importo)}` : "—"}
-      </div>
-      {onClick && (
-        <ChevronRight
-          size={16}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              color: C.ink,
+              fontFamily: fontBody,
+              fontWeight: 600,
+              fontSize: "0.88rem",
+              textDecoration: r.stato === "pagata" ? "line-through" : "none",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {r.descrizione}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              color: stato.color,
+              fontFamily: fontBody,
+              fontSize: "0.72rem",
+              marginTop: 2,
+            }}
+          >
+            <stato.Ico size={11} />
+            {stato.label} · {r.categoria}
+          </div>
+        </div>
+        <div style={{ color: C.ink, fontFamily: fontDisplay, fontWeight: 700, fontSize: "0.88rem", whiteSpace: "nowrap" }}>
+          {r.importo > 0 ? `€ ${euro(r.importo)}` : "—"}
+        </div>
+      </Corpo>
+      {onPaga && (
+        <button
+          onClick={onPaga}
+          disabled={invio}
+          aria-label={`Segna ${r.descrizione} come pagata`}
           style={{
-            color: C.inkMuted,
             flexShrink: 0,
-            transform: aperta ? "rotate(90deg)" : "none",
-            transition: "transform 0.15s",
+            minWidth: 64,
+            height: 34,
+            padding: "0 12px",
+            borderRadius: 999,
+            border: "none",
+            background: C.green,
+            color: C.bg,
+            fontFamily: fontBody,
+            fontWeight: 700,
+            fontSize: "0.8rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 4,
+            cursor: "pointer",
           }}
-        />
+        >
+          {invio ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Check size={14} />}
+          {invio ? "" : "Paga"}
+        </button>
       )}
-    </Tag>
+    </div>
   );
 }
 

@@ -81,6 +81,7 @@ function doPost(e) {
     Logger.log("Payload: " + e.postData.contents);
     if (data.action === "ricategorizza") return ricategorizza(data);
     if (data.action === "ricorrente") return pagaRicorrente(data);
+    if (data.action === "annullaRicorrente") return annullaRicorrente(data);
     return nuovaTransazione(data);
   } catch (err) {
     Logger.log("ERRORE: " + err);
@@ -184,6 +185,30 @@ function pagaRicorrente(data) {
     conto: conto,
     testo: descrizione + ": " + importo.toFixed(2).replace(".", ",") + " € segnata come pagata"
   });
+}
+
+/*  Annulla (tasto "Annulla" nella webapp subito dopo "Paga"):
+ *    { action: "annullaRicorrente", riga, descrizione }
+ *  Cancella la riga SOLO se è proprio quella appena scritta: stessa
+ *  descrizione, Tipo "Spesa" e data di oggi. Altrimenti non tocca nulla.
+ */
+function annullaRicorrente(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_TX);
+  const riga = parseInt(data.riga, 10);
+  const descrizione = String(data.descrizione || "").trim();
+  if (!riga || riga < 2 || riga > sheet.getLastRow()) {
+    return json({ status: "error", testo: "Riga non valida: " + data.riga });
+  }
+  const v = sheet.getRange(riga, 1, 1, 4).getValues()[0];
+  const d = parseData(v[0]);
+  const oggi = new Date();
+  const stessoGiorno = d && d.getFullYear() === oggi.getFullYear() &&
+    d.getMonth() === oggi.getMonth() && d.getDate() === oggi.getDate();
+  if (String(v[3]).trim() !== descrizione || String(v[2]).trim() !== "Spesa" || !stessoGiorno) {
+    return json({ status: "error", testo: "La riga " + riga + " non corrisponde: annulla a mano sul foglio." });
+  }
+  sheet.deleteRow(riga);
+  return json({ status: "ok", testo: descrizione + ": annullata" });
 }
 
 /* ================== RICATEGORIZZAZIONE ================== */

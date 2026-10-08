@@ -24,7 +24,7 @@ di solito basta per sapere QUALE file toccare. Non leggere tutto il repo.
 | Categorizzazione merchant, mappa carte, testo notifica | `apps-script/doPost.gs` (REGOLE, MAPPA_CARTE, componiTesto) |
 | Liquidità/investimenti, tab Patrimonio, storico giornaliero | `apps-script/patrimonio.gs` (saldi SOLO in tab Conti; Patrimonio è calcolato) |
 | PAC automatici (righe Transazioni + quote Posizioni) | `apps-script/pac.gs` (PAC_PIANI: importo, giorno, ticker) |
-| Spesa fissa "segna pagata" dall'app | `src/components/PagaRicorrente.jsx` + `src/scriptApi.js` → `doPost` action `ricorrente` (pagaRicorrente) |
+| Spesa fissa "Paga" dall'app (un tocco + Annulla) | `src/panels/Panels.jsx` (PanelDaPagare) + `src/components/PagaRicorrente.jsx` (importo diverso) + `src/scriptApi.js` → `doPost` action `ricorrente` / `annullaRicorrente`. URL script solo nel localStorage del telefono |
 
 ## Regole da non rompere
 - `ESCLUSE_DAL_TOTALE` deve essere IDENTICO in `src/config.js` e `apps-script/doPost.gs`.
@@ -42,8 +42,7 @@ di solito basta per sapere QUALE file toccare. Non leggere tutto il repo.
 - 2026-10-03: importo vuoto NFC risolto con "Attendi" nel comando rapido. Comando rapido parte B (correzione categoria) da fare.
 - 2026-10-05: `doPost_v3_valute.gs` (KWD→EUR) pronto, rimandato al 3/11 (promemoria). In produzione resta `doPost.gs`; al deploy v3 → doPost.gs (ha già anche il ramo `ricorrente`).
 - 2026-10-05: `patrimonio.gs` e `pac.gs` installati e funzionanti (liquidità 6.453 · investito 1.798; PAC S&P 2 e 16 + NVIDIA 2 = 300 €/mese). Cometa: valore da inserire in Conti più avanti.
-- 2026-10-05: pushato e99935a "Categorie cliccabili…", ma il deploy Pages è FALLITO (15 min, ✗) → sito ancora vecchio. Da rilanciare / verificare con il prossimo push.
-- 2026-10-08: pronti NON pushati: font Apple (SF, tabular-nums) + "segna pagata" spese fisse (URL Apps Script solo nel localStorage del telefono, mai nel codice). `doPost.gs` col ramo `ricorrente` da incollare + Nuova versione.
+- 2026-10-08: pushato daa2b3f (categorie cliccabili, font SF, segna pagata) → deploy ok, visto su iPhone. Poi: pulsante "Paga" a un tocco + "Annulla" (doPost action `annullaRicorrente`) — NON ancora pushato, doPost da reincollare + Nuova versione.
 - Da fare poi: pannello Patrimonio nella webapp (liquidità/investito/posizioni), controllo auto-aggiornamento versione all'apertura, punto migliaia in `euro()`, segno meno su saldo negativo, grafico Andamento vuoto (animazione Recharts).
 - Da verificare: righe Ricorrenti "Bollette" (senza importo/giorno).
 - Storico completo: `~/Claude/Secondo Cervello/Archivio/` (leggere solo se serve).
